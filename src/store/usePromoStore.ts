@@ -2,7 +2,7 @@
 
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { localValidator, PROMO_TRIAL_DAYS } from "@/config/promo-codes";
+import { localValidator, PROMO_CODE_HASHES, PROMO_TRIAL_DAYS } from "@/config/promo-codes";
 
 export interface PromoActivation {
   codeHash: string;
@@ -19,9 +19,20 @@ interface PromoState {
 
 const TRIAL_MS = PROMO_TRIAL_DAYS * 24 * 60 * 60 * 1000;
 
-/** Is a promo activation currently within its 7-day window? */
+/**
+ * A trial is active only while BOTH hold:
+ * - inside its 7-day window, AND
+ * - its code hash is still present in PROMO_CODE_HASHES.
+ * Removing a hash from the config and redeploying therefore acts as a
+ * global kill switch — every device using that code drops back to free
+ * on its next render.
+ */
 export function isPromoActive(activation: PromoActivation | null): boolean {
-  return !!activation && Date.now() - activation.activatedAt < TRIAL_MS;
+  return (
+    !!activation &&
+    Date.now() - activation.activatedAt < TRIAL_MS &&
+    PROMO_CODE_HASHES.includes(activation.codeHash)
+  );
 }
 
 export function promoDaysLeft(activation: PromoActivation | null): number {

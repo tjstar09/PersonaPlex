@@ -1,16 +1,16 @@
 "use client";
 
 import { useState } from "react";
-import { CheckCircle2, KeyRound, Save, ShieldCheck } from "lucide-react";
+import { CheckCircle2, KeyRound, Save, ShieldCheck, TicketX } from "lucide-react";
 import { apiConfigSchema, useApiStore } from "@/store/useApiStore";
 import { usePersonaStore } from "@/store/usePersonaStore";
+import { usePromoStore } from "@/store/usePromoStore";
+import { usePremiumStatus } from "@/hooks/useFeatureFlag";
 import { ModelPicker } from "./ModelPicker";
 
 export function ApiSettings() {
   const config = useApiStore((s) => s.config);
   const saveConfig = useApiStore((s) => s.saveConfig);
-  const premiumUnlocked = usePersonaStore((s) => s.premiumUnlocked);
-  const setPremiumUnlocked = usePersonaStore((s) => s.setPremiumUnlocked);
 
   const [baseUrl, setBaseUrl] = useState(config.baseUrl);
   const [model, setModel] = useState(config.model);
@@ -110,26 +110,66 @@ export function ApiSettings() {
         </button>
       </form>
 
-      <div className="flex items-center justify-between rounded-2xl border border-line px-3 py-2.5">
-        <div className="flex items-center gap-2 text-xs text-muted">
-          <ShieldCheck size={14} style={{ color: premiumUnlocked ? "#8b5cf6" : "#98a0b8" }} />
-          Premium Tier (mock)
+      <PremiumStatusCard />
+    </div>
+  );
+}
+
+function PremiumStatusCard() {
+  const premium = usePremiumStatus();
+  const activation = usePromoStore((s) => s.activation);
+  const deactivate = usePromoStore((s) => s.deactivate);
+  const premiumUnlocked = usePersonaStore((s) => s.premiumUnlocked);
+  const setPremiumUnlocked = usePersonaStore((s) => s.setPremiumUnlocked);
+
+  return (
+    <div className="rounded-2xl border border-line px-3 py-2.5">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-2 text-xs text-muted">
+          <ShieldCheck size={14} style={{ color: premium.active ? "#8b5cf6" : "#98a0b8" }} />
+          <span className="min-w-0 truncate">
+            {premium.active ? (
+              premium.source === "promo" ? (
+                <>Promo trial · <strong className="text-foreground">{premium.daysLeft}d left</strong></>
+              ) : (
+                <>Premium mock (manual toggle)</>
+              )
+            ) : (
+              "Free tier"
+            )}
+          </span>
         </div>
-        <button
-          role="switch"
-          aria-checked={premiumUnlocked}
-          onClick={() => setPremiumUnlocked(!premiumUnlocked)}
-          className={`relative h-6 w-11 rounded-full transition ${
-            premiumUnlocked ? "bg-accent" : "bg-white/15"
-          }`}
-        >
-          <span
-            className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition-all ${
-              premiumUnlocked ? "left-[22px]" : "left-0.5"
+        {premium.source === "promo" ? (
+          <button
+            onClick={deactivate}
+            title="End the promo trial on this device now"
+            className="flex shrink-0 items-center gap-1 rounded-lg border border-danger/40 px-2 py-1 text-[0.65rem] text-danger transition hover:bg-danger/10"
+          >
+            <TicketX size={11} /> End
+          </button>
+        ) : (
+          <button
+            role="switch"
+            aria-checked={premiumUnlocked}
+            onClick={() => setPremiumUnlocked(!premiumUnlocked)}
+            title="Manually toggle mock premium"
+            className={`relative h-6 w-11 shrink-0 rounded-full transition ${
+              premiumUnlocked ? "bg-accent" : "bg-white/15"
             }`}
-          />
-        </button>
+          >
+            <span
+              className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition-all ${
+                premiumUnlocked ? "left-[22px]" : "left-0.5"
+              }`}
+            />
+          </button>
+        )}
       </div>
+      {premium.source === "promo" && activation && (
+        <div className="mt-1 truncate text-[0.62rem] text-muted/70">
+          code #{activation.codeHash.slice(0, 10)}… · auto-expires
+        </div>
+      )}
     </div>
   );
 }
