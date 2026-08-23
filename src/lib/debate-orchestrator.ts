@@ -69,6 +69,24 @@ The optional [SUGGEST_PERSONA] tag must go INSIDE the reply tags, on its own las
 const SUGGEST_EXAMPLE =
   'Optionally, if the conversation reveals a missing perspective that another kind of persona should join to help, add inside the reply tags exactly one tag on its own line: [SUGGEST_PERSONA: "Legal Specialist", "Liability angles keep coming up unchecked"]. Invent a specific role and a concrete, conversation-specific reason — never copy this example verbatim, never use placeholder words like "Name" or "Reason". Do not suggest personas already in the roster.';
 
+/**
+ * Some personas define roster-size-scaled word caps, e.g.
+ * "Scale length inversely with ACTIVE ROSTER size (Max 90 words 1-on-1; 40 words for 3+; 25 words for 6+)."
+ * LLMs are unreliable at counting roster members themselves, so we resolve
+ * the tiers deterministically at prompt-assembly time and replace the
+ * sentence with a single hard cap. Personas without the pattern pass through
+ * untouched.
+ */
+export function resolveRosterScaledCaps(systemPrompt: string, rosterSize: number): string {
+  const re =
+    /Scale length inversely with ACTIVE ROSTER size \(Max (\d+) words 1-on-1; (\d+) words for 3\+; (\d+) words for 6\+\)\./;
+  const match = systemPrompt.match(re);
+  if (!match) return systemPrompt;
+  const [oneOnOne, threePlus, sixPlus] = match.slice(1).map(Number);
+  const cap = rosterSize >= 6 ? sixPlus : rosterSize >= 3 ? threePlus : oneOnOne;
+  return systemPrompt.replace(re, `Max ${cap} words.`);
+}
+
 const HAND_RAISE_SYSTEM = `You are simulating a participant in a multi-persona conversation deciding whether to "raise your hand" to speak next.
 Respond with ONLY a JSON object, no markdown fences, in this exact shape:
 {"wantsToSpeak": boolean, "confidence": number between 0.0 and 1.0, "snippet": "max 12 words on what you would add"}
@@ -88,7 +106,7 @@ export function personaSystemPrompt(
   mode: "chat" | "debate"
 ): string {
   return [
-    persona.systemPrompt,
+    resolveRosterScaledCaps(persona.systemPrompt, activePersonas.length),
     `Your display name is "${persona.name}". Stay fully in character at all times.`,
     rosterAwareness(activePersonas),
     TONE_DIRECTIVES[tone],
