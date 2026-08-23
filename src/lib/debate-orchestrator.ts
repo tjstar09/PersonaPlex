@@ -7,6 +7,46 @@ import {
 
 export type DebateTone = "peaceful" | "standard" | "extreme";
 
+export type ModeratorAction =
+  | "continue"
+  | "conclude"
+  | "probe"
+  | "heat"
+  | "peace"
+  | "popcorn"
+  | "twist";
+
+export const MODERATOR_ACTIONS: {
+  action: ModeratorAction;
+  emoji: string;
+  label: string;
+}[] = [
+  { action: "continue", emoji: "➕", label: "Continue" },
+  { action: "conclude", emoji: "🏁", label: "Conclude" },
+  { action: "probe", emoji: "❓", label: "Probe" },
+  { action: "heat", emoji: "🔥", label: "Heat" },
+  { action: "peace", emoji: "🕊️", label: "Peace" },
+  { action: "popcorn", emoji: "🍿", label: "Popcorn" },
+  { action: "twist", emoji: "🎲", label: "Twist" },
+];
+
+export const MODERATOR_DIRECTIVES: Record<ModeratorAction, string> = {
+  continue:
+    "Continue the debate: advance your argument one concrete step further. No repetition of earlier points.",
+  conclude:
+    "CLOSING STATEMENT: Give your final word on this topic — your strongest closing punch, then stop. Max 60 words.",
+  probe:
+    "A probing question just hit the floor: name the weakest assumption made so far (yours included) and address it head-on.",
+  heat:
+    "TEMPERATURE RISING: The crowd is jeering. Escalate — sharper, more personal, twice as theatrical (never slurs). Double down harder than before.",
+  peace:
+    "COOL-OFF CALLED: Find genuine common ground with your opponent. Acknowledge one thing they got right, then propose ONE shared conclusion you could both sign.",
+  popcorn:
+    "POPCORN MODE: One-liner roast round. Max 25 words. Pure wit over substance — make the audience laugh at the other side's expense.",
+  twist:
+    "PLOT TWIST: A breaking development has just changed the situation. Invent a surprising but plausible twist relevant to the topic and react to it in character.",
+};
+
 export const TONE_DIRECTIVES: Record<DebateTone, string> = {
   peaceful:
     "TONE DIRECTIVE — Peaceful (default): Collaborate openly. Acknowledge valid points made by other personas before adding your own. Never attack anyone. Seek shared ground and constructive synthesis.",
@@ -162,7 +202,8 @@ export interface DebateTurnContext {
 export function debateTurnMessages(
   ctx: DebateTurnContext,
   speakerId: string,
-  priorTurns: ChatCompletionMessage[]
+  priorTurns: ChatCompletionMessage[],
+  moderatorLine?: string
 ): ChatCompletionMessage[] {
   const speaker = ctx.activePersonas.find((p) => p.id === speakerId);
   if (!speaker) throw new Error(`Speaker ${speakerId} not found`);
@@ -182,7 +223,10 @@ export function debateTurnMessages(
     ...priorTurns,
     {
       role: "user",
-      content: `DEBATE TOPIC: ${ctx.topic}\n\nTRANSCRIPT SO FAR:\n${transcript}\n\nIt is now YOUR turn, ${speaker.name}. Deliver your debate contribution.`,
+      content:
+        `DEBATE TOPIC: ${ctx.topic}\n\nTRANSCRIPT SO FAR:\n${transcript}\n\n` +
+        (moderatorLine ? `🎤 MODERATOR INSTRUCTION: ${moderatorLine}\n\n` : "") +
+        `It is now YOUR turn, ${speaker.name}. Deliver your debate contribution.`,
     },
   ];
 }

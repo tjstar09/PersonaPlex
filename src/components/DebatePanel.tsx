@@ -2,9 +2,12 @@
 
 import { motion } from "framer-motion";
 import { Flame, Hand, MicVocal, Play, Square, Swords } from "lucide-react";
-import { getPersonaById } from "@/store/usePersonaStore";
+import { getPersonaById, usePersonaStore } from "@/store/usePersonaStore";
 import { useChatStore } from "@/store/useChatStore";
-import type { DebateTone } from "@/lib/debate-orchestrator";
+import {
+  MODERATOR_ACTIONS,
+  type DebateTone,
+} from "@/lib/debate-orchestrator";
 import type { HandRaise } from "@/types";
 const TONES: { id: DebateTone; label: string; icon: typeof Flame }[] = [
   { id: "peaceful", label: "Peaceful", icon: Flame },
@@ -99,6 +102,8 @@ export function DebatePanel() {
         </button>
       </div>
 
+      <ModeratorBar canDebate={topic.trim().length > 0} isBusy={isBusy} />
+
       {(isEvaluatingHands || handRaises.length > 0) && (
         <div>
           <div className="mb-1.5 flex items-center gap-1.5 text-[0.7rem] uppercase tracking-wider text-muted">
@@ -122,6 +127,34 @@ export function DebatePanel() {
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+function ModeratorBar({ canDebate, isBusy }: { canDebate: boolean; isBusy: boolean }) {
+  const moderate = useChatStore((s) => s.moderate);
+  const activeCount = usePersonaStore((s) => s.activeIds.length);
+  const enabled = canDebate && activeCount >= 2 && !isBusy;
+
+  return (
+    <div>
+      <div className="mb-1.5 flex items-center gap-1.5 text-[0.7rem] uppercase tracking-wider text-muted">
+        <MicVocal size={12} /> Moderator Controls
+      </div>
+      <div className="grid grid-cols-4 gap-1.5">
+        {MODERATOR_ACTIONS.map(({ action, emoji, label }) => (
+          <button
+            key={action}
+            onClick={() => void moderate(action)}
+            disabled={!enabled}
+            title={`Moderator: ${label}`}
+            className="flex flex-col items-center gap-0.5 rounded-xl border border-line px-1 py-1.5 text-[0.62rem] text-muted transition hover:border-accent/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-35"
+          >
+            <span className="text-sm">{emoji}</span>
+            {label}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }

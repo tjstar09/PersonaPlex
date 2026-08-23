@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { AlertTriangle, Sparkles, X } from "lucide-react";
 import { useMounted } from "@/hooks/useFeatureFlag";
@@ -51,7 +50,8 @@ function Header() {
 
 export default function Home() {
   const mounted = useMounted();
-  const [upgradeOpen, setUpgradeOpen] = useState(false);
+  const upgradeOpen = usePersonaStore((s) => s.pendingUpgrade);
+  const setUpgradeOpen = usePersonaStore((s) => s.setPendingUpgrade);
   const error = useChatStore((s) => s.error);
   const dismissError = useChatStore((s) => s.dismissError);
 

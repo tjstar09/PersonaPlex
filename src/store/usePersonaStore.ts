@@ -101,6 +101,8 @@ interface PersonaState {
   updatePersona: (id: string, patch: Partial<Omit<Persona, "id" | "isPrebuilt">>) => void;
   removeCustomPersona: (id: string) => void;
   setPremiumUnlocked: (v: boolean) => void;
+  pendingUpgrade: boolean;
+  setPendingUpgrade: (v: boolean) => void;
 }
 
 const all = (s: PersonaState) => [...s.personas, ...s.customPersonas];
@@ -136,6 +138,8 @@ export const usePersonaStore = create<PersonaState>()(
           activeIds: s.activeIds.filter((x) => x !== id),
         })),
       setPremiumUnlocked: (v) => set({ premiumUnlocked: v }),
+      pendingUpgrade: false,
+      setPendingUpgrade: (v) => set({ pendingUpgrade: v }),
     }),
     {
       name: "personaplex.personas",

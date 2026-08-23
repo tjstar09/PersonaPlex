@@ -2,7 +2,7 @@
 
 import { create } from "zustand";
 import type { ChatCompletionMessage } from "@/lib/llm-client";
-import { streamChatCompletion } from "@/lib/llm-client";
+import { completeChat, streamChatCompletion } from "@/lib/llm-client";
 import { ThinkingFilter, stripThinkBlocks } from "@/lib/thinking-filter";
 import { ReplyEnvelopeFilter } from "@/lib/reply-envelope";
 import type { ChatMessage, HandRaise, Persona } from "@/types";
@@ -11,9 +11,11 @@ import { getPersonaById, usePersonaStore } from "./usePersonaStore";
 import {
   collectHandRaises,
   debateTurnMessages,
+  MODERATOR_DIRECTIVES,
   personaSystemPrompt,
   StreamLock,
   type DebateTone,
+  type ModeratorAction,
 } from "@/lib/debate-orchestrator";
 import { extractSuggestions, stripSuggestionTags } from "@/lib/suggestion-parser";
 
@@ -21,6 +23,12 @@ const debateLock = new StreamLock();
 let abortController: AbortController | null = null;
 let idCounter = 0;
 const nextId = () => `msg-${Date.now()}-${idCounter++}`;
+
+/** Request params kept per message so a failed turn can be retried. */
+const turnRegistry = new Map<
+  string,
+  { personaId: string; messages: ChatCompletionMessage[] }
+>();
 
 function buildUserMessage(content: string): ChatMessage {
   return { id: nextId(), role: "user", content, timestamp: Date.now() };
@@ -43,51 +51,59 @@ interface ChatState {
   dismissError: () => void;
   sendDirect: (text: string) => Promise<void>;
   startDebate: () => Promise<void>;
+  moderate: (action: ModeratorAction) => Promise<void>;
+  retryMessage: (messageId: string) => Promise<void>;
   stop: () => void;
 }
 
 /**
- * Streams one assistant turn into a chat bubble. Reasoning-model output
- * (<think> blocks / reasoning_content deltas) is filtered out of the
- * visible text and surfaced as a "thinking" indicator instead. If the
- * provider ignored streaming and returned the whole answer at once, it is
- * revealed with a typewriter effect so the UI still feels live.
+ * Streams one assistant turn into a chat bubble.
+ * Layer 1 discards everything outside the <reply> envelope; layer 2 strips
+ * residual <think> blocks; reasoning deltas surface a "thinking" pill.
+ * Empty replies are retried once with a nudge; persistent failures mark the
+ * bubble `failed` so the user can hit Retry.
  */
 async function runAssistantStream(params: {
   personaId: string;
   messages: ChatCompletionMessage[];
   signal?: AbortSignal;
+  existingId?: string;
 }): Promise<string> {
-  const { personaId, messages, signal } = params;
-  const messageId = nextId();
-  const placeholder: ChatMessage = {
-    id: messageId,
-    role: "assistant",
-    personaId,
-    content: "",
-    timestamp: Date.now(),
-    streaming: true,
-  };
-  useChatStore.setState((s) => ({
-    messages: [...s.messages, placeholder],
-    speakingPersonaId: personaId,
-  }));
+  const { personaId, messages, signal, existingId } = params;
 
-  const patch = (p: Partial<ChatMessage>) =>
+  const messageId = existingId ?? nextId();
+  if (!existingId) {
+    const placeholder: ChatMessage = {
+      id: messageId,
+      role: "assistant",
+      personaId,
+      content: "",
+      timestamp: Date.now(),
+      streaming: true,
+    };
     useChatStore.setState((s) => ({
-      messages: s.messages.map((m) => (m.id === messageId ? { ...m, ...p } : m)),
+      messages: [...s.messages, placeholder],
+      speakingPersonaId: personaId,
     }));
+  } else {
+    patchMessage(messageId, { streaming: true, thinking: false, failed: false, content: "" });
+    useChatStore.setState({ speakingPersonaId: personaId });
+  }
 
-  const filter = new ThinkingFilter();
-  const envelope = new ReplyEnvelopeFilter();
-  let full = "";
-  let pendingFirstChunk: string | null = null;
-  let live = false;
+  turnRegistry.set(messageId, { personaId, messages });
 
-  try {
+  const patch = (p: Partial<ChatMessage>) => patchMessage(messageId, p);
+
+  const attempt = async (attemptMessages: ChatCompletionMessage[]): Promise<string> => {
+    const filter = new ThinkingFilter();
+    const envelope = new ReplyEnvelopeFilter();
+    let full = "";
+    let pendingFirstChunk: string | null = null;
+    let live = false;
+
     for await (const delta of streamChatCompletion(
       useApiStore.getState().config,
-      messages,
+      attemptMessages,
       signal
     )) {
       if (signal?.aborted) break;
@@ -98,9 +114,7 @@ async function runAssistantStream(params: {
       }
       if (!delta.content) continue;
 
-      // Layer 1: discard everything outside the <reply> envelope
-      // (plain-text chain-of-thought, prompt echoes). While the envelope
-      // hasn't opened yet, surface "thinking" instead of text.
+      // Layer 1: discard everything outside the <reply> envelope.
       const enveloped = envelope.push(delta.content);
       if (!enveloped) {
         if (envelope.state === "pre") patch({ thinking: true });
@@ -114,9 +128,8 @@ async function runAssistantStream(params: {
         continue;
       }
 
-      // Hold back the very first chunk: if nothing else follows, the
-      // provider didn't really stream and we typewriter-reveal instead.
       if (!live) {
+        // Hold back the first chunk to detect one-shot (non-stream) payloads.
         if (pendingFirstChunk === null) {
           pendingFirstChunk = visible;
           continue;
@@ -129,7 +142,7 @@ async function runAssistantStream(params: {
       patch({ content: full, thinking: false });
     }
 
-    let tail = thinkFlush(filter, envelope.end());
+    let tail = filter.push(envelope.end()) + filter.end();
     if (pendingFirstChunk !== null) tail = pendingFirstChunk + tail;
 
     if (!live && tail) {
@@ -146,19 +159,76 @@ async function runAssistantStream(params: {
       full += tail;
       patch({ content: full, thinking: false });
     }
-  } finally {
-    const safe = stripThinkBlocks(full);
-    const clean = stripSuggestionTags(safe);
-    const suggestions = extractSuggestions(full);
-    patch({
-      content: clean || full,
-      streaming: false,
-      thinking: false,
-      suggestions,
-    });
-    useChatStore.setState({ speakingPersonaId: null });
+    return full.trim();
+  };
+
+  let text = "";
+  try {
+    text = await attempt(messages);
+    if (text === "" && !signal?.aborted) {
+      // One automatic retry with an explicit nudge before giving up.
+      patch({ thinking: false, content: "" });
+      const nudged: ChatCompletionMessage[] = [
+        ...messages,
+        {
+          role: "user",
+          content:
+            'Your previous reply was empty. Respond now as your persona — remember the <reply> </reply> wrapper.',
+        },
+      ];
+      turnRegistry.set(messageId, { personaId, messages: nudged });
+      text = await attempt(nudged);
+    }
+  } catch (err) {
+    patch({ streaming: false, thinking: false, failed: true });
+    throw err;
   }
-  return stripSuggestionTags(full) || full;
+
+  if (text === "") {
+    // Still empty after retry — leave a retryable failed bubble, no toast.
+    patch({ streaming: false, thinking: false, failed: true, content: "" });
+    return "";
+  }
+
+  const clean = stripSuggestionTags(stripThinkBlocks(text)) || text;
+  patch({
+    content: clean,
+    streaming: false,
+    thinking: false,
+    failed: false,
+    suggestions: extractSuggestions(text),
+  });
+  useChatStore.setState({ speakingPersonaId: null });
+  turnRegistry.delete(messageId);
+  return clean;
+}
+
+function patchMessage(id: string, p: Partial<ChatMessage>) {
+  useChatStore.setState((s) => ({
+    messages: s.messages.map((m) => (m.id === id ? { ...m, ...p } : m)),
+  }));
+}
+
+function handleLlmError(
+  set: (partial: Partial<ChatState> | ((s: ChatState) => Partial<ChatState>)) => void,
+  err: unknown,
+  fallback: string
+) {
+  const aborted = err instanceof DOMException && err.name === "AbortError";
+  if (!aborted) {
+    set({ error: err instanceof Error ? err.message : fallback });
+  }
+  set((s) => ({
+    messages: s.messages.map((m) =>
+      m.streaming ? { ...m, streaming: false, thinking: false } : m
+    ),
+    speakingPersonaId: null,
+  }));
+}
+
+function activePersonasOf(): Persona[] {
+  const { activeIds } = usePersonaStore.getState();
+  return activeIds.map(getPersonaById).filter((p): p is Persona => Boolean(p));
 }
 
 export const useChatStore = create<ChatState>((set, get) => ({
@@ -180,16 +250,23 @@ export const useChatStore = create<ChatState>((set, get) => ({
   stop: () => {
     abortController?.abort();
     abortController = null;
-    set({ isBusy: false, isEvaluatingHands: false, speakingPersonaId: null, queueOrder: [] });
+    set({
+      isBusy: false,
+      isEvaluatingHands: false,
+      speakingPersonaId: null,
+      queueOrder: [],
+    });
+    set((s) => ({
+      messages: s.messages.map((m) =>
+        m.streaming ? { ...m, streaming: false, thinking: false } : m
+      ),
+    }));
   },
 
   sendDirect: async (text) => {
     const trimmed = text.trim();
     if (!trimmed || get().isBusy) return;
-    const { activeIds } = usePersonaStore.getState();
-    const personas = activeIds
-      .map(getPersonaById)
-      .filter((p): p is Persona => Boolean(p));
+    const personas = activePersonasOf();
     if (personas.length === 0) {
       set({ error: "Activate at least one persona first." });
       return;
@@ -261,10 +338,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       set({ error: "Set a debate topic in the Topic Controller." });
       return;
     }
-    const { activeIds } = usePersonaStore.getState();
-    const personas = activeIds
-      .map(getPersonaById)
-      .filter((p): p is Persona => Boolean(p));
+    const personas = activePersonasOf();
     if (personas.length < 2) {
       set({ error: "Activate at least 2 personas to start a debate." });
       return;
@@ -280,55 +354,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     });
 
     try {
-      const raises = await collectHandRaises(useApiStore.getState().config, {
-        topicOrMessage: topic,
-        history: get().messages,
-        activePersonas: personas,
-        tone: get().tone,
-        signal,
-      });
-      const queue = raises
-        .filter((r) => r.wantsToSpeak && r.confidence >= 0.35)
-        .sort((a, b) => b.confidence - a.confidence);
-      const finalQueue =
-        queue.length > 0
-          ? queue
-          : [...raises].sort((a, b) => b.confidence - a.confidence).slice(0, 2);
-
-      set({
-        isEvaluatingHands: false,
-        handRaises: raises,
-        queueOrder: finalQueue.map((q) => q.personaId),
-      });
-
-      const priorTurns: ChatCompletionMessage[] = [];
-      for (const raise of finalQueue) {
-        if (signal.aborted) break;
-        const personaId = raise.personaId;
-        set((s) => ({ queueOrder: s.queueOrder.filter((id) => id !== personaId) }));
-        await debateLock.run(async () => {
-          const streamed = await runAssistantStream({
-            personaId,
-            signal,
-            messages: debateTurnMessages(
-              {
-                config: useApiStore.getState().config,
-                topic,
-                history: get().messages,
-                activePersonas: personas,
-                tone: get().tone,
-                signal,
-              },
-              personaId,
-              priorTurns
-            ),
-          });
-          priorTurns.push({
-            role: "user",
-            content: `DEBATE TURN by ${getPersonaById(personaId)?.name}: ${streamed}`,
-          });
-        });
-      }
+      await runHandRaiseRound(set, get, signal, personas, topic, undefined, undefined);
     } catch (err) {
       handleLlmError(set, err, "Debate failed");
     } finally {
@@ -336,26 +362,160 @@ export const useChatStore = create<ChatState>((set, get) => ({
       abortController = null;
     }
   },
+
+  moderate: async (action) => {
+    if (get().isBusy) return;
+    const topic = get().topic.trim();
+    const personas = activePersonasOf();
+    if (!topic || personas.length < 2) {
+      set({ error: "Set a topic and activate at least 2 personas first." });
+      return;
+    }
+    const directive = MODERATOR_DIRECTIVES[action];
+
+    abortController = new AbortController();
+    const signal = abortController.signal;
+    set({ isBusy: true, error: null });
+
+    try {
+      set((s) => ({
+        messages: [
+          ...s.messages,
+          buildUserMessage(`🎤 Moderator — ${directive.split(":")[0]}:`),
+        ],
+      }));
+
+      await runHandRaiseRound(set, get, signal, personas, topic, directive, action);
+
+      if (action === "conclude") {
+        // Moderator synthesizes the final verdict from closing statements.
+        const transcript = get()
+          .messages.slice(-8)
+          .map((m) => `${getPersonaById(m.personaId ?? "")?.name ?? (m.role === "user" ? "MODERATOR" : "?")}: ${m.content}`)
+          .join("\n");
+        const verdict = await completeChat(useApiStore.getState().config, [
+          {
+            role: "system",
+            content:
+              "You are a neutral, sharp-witted debate moderator. Summarize the debate outcome in max 80 words: where each side landed and what common ground (if any) emerged. No preamble.",
+          },
+          { role: "user", content: `Topic: ${topic}\n\nClosing transcript:\n${transcript}` },
+        ], signal);
+        const cleanVerdict = stripThinkBlocks(verdict).trim() || "The floor rests.";
+        set((s) => ({
+          messages: [
+            ...s.messages,
+            {
+              id: nextId(),
+              role: "assistant",
+              personaId: "__moderator__",
+              content: `🏁 VERDICT: ${cleanVerdict}`,
+              timestamp: Date.now(),
+            },
+          ],
+        }));
+      }
+    } catch (err) {
+      handleLlmError(set, err, "Moderator action failed");
+    } finally {
+      set({ isBusy: false, isEvaluatingHands: false });
+      abortController = null;
+    }
+  },
+
+  retryMessage: async (messageId) => {
+    const entry = turnRegistry.get(messageId);
+    if (!entry || get().isBusy) return;
+    const personas = activePersonasOf();
+    if (personas.length === 0) {
+      set({ error: "Activate at least one persona first." });
+      return;
+    }
+
+    abortController = new AbortController();
+    set({ isBusy: true, error: null });
+    try {
+      await debateLock.run(async () => {
+        await runAssistantStream({
+          personaId: entry.personaId,
+          messages: entry.messages,
+          signal: abortController!.signal,
+          existingId: messageId,
+        });
+      });
+    } catch (err) {
+      handleLlmError(set, err, "Retry failed");
+    } finally {
+      set({ isBusy: false });
+      abortController = null;
+    }
+  },
 }));
 
-/** Flush envelope remainder through the think-filter, then flush the filter. */
-function thinkFlush(filter: ThinkingFilter, envelopeRemainder: string): string {
-  return filter.push(envelopeRemainder) + filter.end();
-}
-
-function handleLlmError(
+/** One hand-raise evaluation → queued sequential turns. */
+async function runHandRaiseRound(
   set: (partial: Partial<ChatState> | ((s: ChatState) => Partial<ChatState>)) => void,
-  err: unknown,
-  fallback: string
-) {
-  const aborted = err instanceof DOMException && err.name === "AbortError";
-  if (!aborted) {
-    set({ error: err instanceof Error ? err.message : fallback });
+  get: () => ChatState,
+  signal: AbortSignal,
+  personas: Persona[],
+  topic: string,
+  moderatorDirective: string | undefined,
+  action: ModeratorAction | undefined
+): Promise<void> {
+  set({ isEvaluatingHands: true });
+  const raises = await collectHandRaises(useApiStore.getState().config, {
+    topicOrMessage: moderatorDirective ? `${topic}\n\nMODERATOR: ${moderatorDirective}` : topic,
+    history: get().messages,
+    activePersonas: personas,
+    tone: get().tone,
+    signal,
+  });
+  const threshold = action === "popcorn" ? 0.15 : 0.35;
+  const queue = raises
+    .filter((r) => r.wantsToSpeak && r.confidence >= threshold)
+    .sort((a, b) => b.confidence - a.confidence);
+  const finalQueue =
+    queue.length > 0
+      ? queue
+      : [...raises].sort((a, b) => b.confidence - a.confidence).slice(0, 2);
+
+  set({
+    isEvaluatingHands: false,
+    handRaises: raises,
+    queueOrder: finalQueue.map((q) => q.personaId),
+  });
+
+  const priorTurns: ChatCompletionMessage[] = [];
+  for (const raise of finalQueue) {
+    if (signal.aborted) break;
+    const personaId = raise.personaId;
+    set((s) => ({ queueOrder: s.queueOrder.filter((id) => id !== personaId) }));
+    await debateLock.run(async () => {
+      const streamed = await runAssistantStream({
+        personaId,
+        signal,
+        messages: debateTurnMessages(
+          {
+            config: useApiStore.getState().config,
+            topic,
+            history: get().messages,
+            activePersonas: personas,
+            tone: get().tone,
+            signal,
+          },
+          personaId,
+          priorTurns,
+          moderatorDirective
+        ),
+      });
+      if (streamed) {
+        priorTurns.push({
+          role: "user",
+          content: `DEBATE TURN by ${getPersonaById(personaId)?.name}: ${streamed}`,
+        });
+      }
+    });
   }
-  set((s) => ({
-    messages: s.messages.map((m) => ({ ...m, streaming: false, thinking: false })),
-    speakingPersonaId: null,
-  }));
 }
 
 /** Hand-raise evaluation to pick a respondent when several personas are active. */
@@ -378,7 +538,5 @@ async function pickBestResponder(args: {
   const winner = [...raises]
     .filter((r) => r.wantsToSpeak)
     .sort((a, b) => b.confidence - a.confidence)[0];
-  return (
-    getPersonaById(winner?.personaId ?? "") ?? args.personas[0]
-  );
+  return getPersonaById(winner?.personaId ?? "") ?? args.personas[0];
 }

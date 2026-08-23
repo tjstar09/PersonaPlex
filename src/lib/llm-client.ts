@@ -20,13 +20,47 @@ function endpoint(config: ApiConfig): string {
   return `${normalizeBaseUrl(config.baseUrl)}/chat/completions`;
 }
 
+const RETRY_DELAYS_MS = [800, 2000];
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * Fetch with automatic retry on transient failures: network errors,
+ * HTTP 429 (rate limit) and 5xx. Aborts propagate immediately.
+ */
+async function fetchWithRetry(
+  url: string,
+  init: RequestInit & { signal?: AbortSignal }
+): Promise<Response> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      const res = await fetch(url, init);
+      if (
+        (res.status === 429 || res.status >= 500) &&
+        attempt < RETRY_DELAYS_MS.length
+      ) {
+        await sleep(RETRY_DELAYS_MS[attempt]);
+        continue;
+      }
+      return res;
+    } catch (err) {
+      if (init.signal?.aborted) throw err;
+      if (attempt < RETRY_DELAYS_MS.length) {
+        await sleep(RETRY_DELAYS_MS[attempt]);
+        continue;
+      }
+      throw err;
+    }
+  }
+}
+
 async function requestChatCompletion(
   config: ApiConfig,
   messages: ChatCompletionMessage[],
   stream: boolean,
   signal?: AbortSignal
 ): Promise<Response> {
-  const res = await fetch(endpoint(config), {
+  const res = await fetchWithRetry(endpoint(config), {
     method: "POST",
     signal,
     headers: {

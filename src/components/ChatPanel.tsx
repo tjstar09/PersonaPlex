@@ -17,10 +17,16 @@ function addSuggestedPersona(s: Suggestion) {
   );
   if (existing) {
     if (!state.activeIds.includes(existing.id)) {
-      // respect tier guard: only auto-activate if under limit
       const limit = state.premiumUnlocked ? 10 : 3;
       if (state.activeIds.length < limit) state.toggleActive(existing.id);
+      else state.setPendingUpgrade(true);
     }
+    return;
+  }
+  // Tier guard: at cap, route into the upgrade flow instead of silently skipping.
+  const limit = state.premiumUnlocked ? 10 : 3;
+  if (state.activeIds.length >= limit) {
+    state.setPendingUpgrade(true);
     return;
   }
   state.addCustomPersona({

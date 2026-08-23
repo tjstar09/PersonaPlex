@@ -1,7 +1,9 @@
 "use client";
 
 import { motion } from "framer-motion";
+import { RotateCcw } from "lucide-react";
 import { getPersonaById } from "@/store/usePersonaStore";
+import { useChatStore } from "@/store/useChatStore";
 import { stripThinkBlocks } from "@/lib/thinking-filter";
 import type { ChatMessage, Suggestion } from "@/types";
 import { MarkdownRenderer } from "./MarkdownRenderer";
@@ -28,6 +30,7 @@ export function MessageBubble({
     );
   }
 
+  const isModerator = message.personaId === "__moderator__";
   const persona = getPersonaById(message.personaId ?? "");
 
   return (
@@ -37,11 +40,13 @@ export function MessageBubble({
       className="flex gap-2.5"
     >
       <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl border border-line bg-surface-strong text-lg">
-        {persona?.avatar ?? "🤖"}
+        {isModerator ? "🎤" : (persona?.avatar ?? "🤖")}
       </div>
       <div className="min-w-0 max-w-[85%]">
         <div className="mb-1 flex items-center gap-2 text-xs text-muted">
-          <span className="font-semibold text-foreground/90">{persona?.name ?? "System"}</span>
+          <span className="font-semibold text-foreground/90">
+            {isModerator ? "Moderator" : (persona?.name ?? "System")}
+          </span>
           {message.thinking && (
             <span className="flex items-center gap-1 animate-pulse text-accent-2">
               🤔 thinking…
@@ -59,7 +64,19 @@ export function MessageBubble({
             message.streaming ? "stream-caret" : ""
           }`}
         >
-          <MarkdownRenderer content={stripThinkBlocks(message.content) || "…"} />
+          {message.failed ? (
+            <div className="flex items-center gap-2 text-sm italic text-muted">
+              <span>no response — the endpoint hiccuped</span>
+              <button
+                onClick={() => void useChatStore.getState().retryMessage(message.id)}
+                className="flex items-center gap-1 rounded-lg border border-accent/50 bg-accent-soft px-2 py-1 text-xs not-italic text-accent transition hover:brightness-110"
+              >
+                <RotateCcw size={11} /> Retry
+              </button>
+            </div>
+          ) : (
+            <MarkdownRenderer content={stripThinkBlocks(message.content) || "…"} />
+          )}
         </div>
         {message.suggestions?.map((s, i) => (
           <SuggestionCard key={i} suggestion={s} onAdd={onAddSuggestedPersona} />
