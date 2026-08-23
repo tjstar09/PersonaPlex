@@ -24,6 +24,7 @@ export interface ChatMessage {
   content: string;
   timestamp: number;
   streaming?: boolean;
+  thinking?: boolean;
   suggestions?: Suggestion[];
 }
 

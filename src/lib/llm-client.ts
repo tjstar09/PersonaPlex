@@ -5,6 +5,13 @@ export interface ChatCompletionMessage {
   content: string;
 }
 
+export interface StreamDelta {
+  /** Visible answer tokens. */
+  content?: string;
+  /** Reasoning-model chain-of-thought tokens (hidden from chat UI). */
+  reasoning?: string;
+}
+
 export function normalizeBaseUrl(url: string): string {
   return url.trim().replace(/\/+$/, "");
 }
@@ -24,6 +31,7 @@ async function requestChatCompletion(
     signal,
     headers: {
       "Content-Type": "application/json",
+      Accept: stream ? "text/event-stream" : "application/json",
       Authorization: `Bearer ${config.apiKey}`,
       ...(normalizeBaseUrl(config.baseUrl).includes("openrouter")
         ? { "HTTP-Referer": "https://personaplex.local", "X-Title": "PersonaPlex" }
@@ -44,13 +52,35 @@ async function requestChatCompletion(
   return res;
 }
 
+interface DeltaShape {
+  content?: string;
+  reasoning?: string;
+  reasoning_content?: string;
+}
+
+/**
+ * Streams a chat completion as structured deltas. Providers that ignore
+ * `stream:true` (proxies, some gateways) are handled gracefully: the whole
+ * JSON payload is parsed and emitted as a single content delta.
+ */
 export async function* streamChatCompletion(
   config: ApiConfig,
   messages: ChatCompletionMessage[],
   signal?: AbortSignal
-): AsyncGenerator<string> {
+): AsyncGenerator<StreamDelta> {
   const res = await requestChatCompletion(config, messages, true, signal);
-  if (!res.body) throw new Error("Response has no body stream");
+  const contentType = res.headers.get("content-type") ?? "";
+
+  if (!res.body || contentType.includes("application/json")) {
+    const json = (await res.json()) as {
+      choices?: { message?: { content?: string } }[];
+      error?: { message?: string };
+    };
+    if (json.error?.message) throw new Error(`LLM error: ${json.error.message}`);
+    yield { content: json.choices?.[0]?.message?.content ?? "" };
+    return;
+  }
+
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
@@ -59,21 +89,27 @@ export async function* streamChatCompletion(
     const { done, value } = await reader.read();
     if (done) break;
     buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split("\n");
+    const lines = buffer.split(/\r?\n/);
     buffer = lines.pop() ?? "";
     for (const line of lines) {
       const trimmed = line.trim();
       if (!trimmed.startsWith("data:")) continue;
       const payload = trimmed.slice(5).trim();
-      if (payload === "[DONE]") return;
+      if (!payload || payload === "[DONE]") continue;
       try {
         const json = JSON.parse(payload) as {
-          choices?: { delta?: { content?: string } }[];
+          choices?: { delta?: DeltaShape }[];
+          error?: { message?: string };
         };
-        const delta = json.choices?.[0]?.delta?.content;
-        if (delta) yield delta;
-      } catch {
-        // ignore keep-alive / malformed fragments
+        if (json.error?.message) throw new Error(`LLM error: ${json.error.message}`);
+        const delta = json.choices?.[0]?.delta;
+        if (!delta) continue;
+        const reasoning = delta.reasoning_content ?? delta.reasoning;
+        if (reasoning) yield { reasoning };
+        if (delta.content) yield { content: delta.content };
+      } catch (err) {
+        if (err instanceof SyntaxError) continue; // keep-alive / malformed fragment
+        throw err;
       }
     }
   }

@@ -38,9 +38,10 @@ export function ChatPanel() {
   const clearChat = useChatStore((s) => s.clearChat);
   const bottomRef = useRef<HTMLDivElement>(null);
 
+  const lastContent = messages[messages.length - 1]?.content;
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+    bottomRef.current?.scrollIntoView();
+  }, [messages.length, lastContent]);
 
   return (
     <div className="glass relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-3xl">

@@ -1,18 +1,19 @@
 "use client";
 
 import { create } from "zustand";
+import type { ChatCompletionMessage } from "@/lib/llm-client";
+import { streamChatCompletion } from "@/lib/llm-client";
+import { ThinkingFilter } from "@/lib/thinking-filter";
 import type { ChatMessage, HandRaise, Persona } from "@/types";
 import { useApiStore } from "./useApiStore";
 import { getPersonaById, usePersonaStore } from "./usePersonaStore";
 import {
   collectHandRaises,
+  debateTurnMessages,
   personaSystemPrompt,
-  runDebateTurn,
   StreamLock,
   type DebateTone,
 } from "@/lib/debate-orchestrator";
-import type { ChatCompletionMessage } from "@/lib/llm-client";
-import { streamChatCompletion } from "@/lib/llm-client";
 import { extractSuggestions, stripSuggestionTags } from "@/lib/suggestion-parser";
 
 const debateLock = new StreamLock();
@@ -44,53 +45,106 @@ interface ChatState {
   stop: () => void;
 }
 
-async function streamAssistantTurn(params: {
-  persona: Persona;
-  messages: Parameters<typeof streamChatCompletion>[1];
+/**
+ * Streams one assistant turn into a chat bubble. Reasoning-model output
+ * (<think> blocks / reasoning_content deltas) is filtered out of the
+ * visible text and surfaced as a "thinking" indicator instead. If the
+ * provider ignored streaming and returned the whole answer at once, it is
+ * revealed with a typewriter effect so the UI still feels live.
+ */
+async function runAssistantStream(params: {
+  personaId: string;
+  messages: ChatCompletionMessage[];
   signal?: AbortSignal;
-}): Promise<ChatMessage> {
-  const { persona, messages, signal } = params;
-  const assistant: ChatMessage = {
-    id: nextId(),
+}): Promise<string> {
+  const { personaId, messages, signal } = params;
+  const messageId = nextId();
+  const placeholder: ChatMessage = {
+    id: messageId,
     role: "assistant",
-    personaId: persona.id,
+    personaId,
     content: "",
     timestamp: Date.now(),
     streaming: true,
   };
-  const store = useChatStore.getState();
-  useChatStore.setState({
-    messages: [...store.messages, assistant],
-    speakingPersonaId: persona.id,
-  });
+  useChatStore.setState((s) => ({
+    messages: [...s.messages, placeholder],
+    speakingPersonaId: personaId,
+  }));
 
+  const patch = (p: Partial<ChatMessage>) =>
+    useChatStore.setState((s) => ({
+      messages: s.messages.map((m) => (m.id === messageId ? { ...m, ...p } : m)),
+    }));
+
+  const filter = new ThinkingFilter();
   let full = "";
+  let pendingFirstChunk: string | null = null;
+  let live = false;
+
   try {
     for await (const delta of streamChatCompletion(
       useApiStore.getState().config,
       messages,
       signal
     )) {
-      full += delta;
-      useChatStore.setState((s) => ({
-        messages: s.messages.map((m) =>
-          m.id === assistant.id ? { ...m, content: full } : m
-        ),
-      }));
+      if (signal?.aborted) break;
+
+      if (delta.reasoning) {
+        patch({ thinking: true });
+        continue;
+      }
+
+      const visible = delta.content ? filter.push(delta.content) : "";
+      if (!visible) {
+        if (filter.thinking) patch({ thinking: true });
+        continue;
+      }
+
+      // Hold back the very first chunk: if nothing else follows, the
+      // provider didn't really stream and we typewriter-reveal instead.
+      if (!live) {
+        if (pendingFirstChunk === null) {
+          pendingFirstChunk = visible;
+          continue;
+        }
+        full += pendingFirstChunk;
+        pendingFirstChunk = null;
+        live = true;
+      }
+      full += visible;
+      patch({ content: full, thinking: false });
+    }
+
+    let tail = filter.end();
+    if (pendingFirstChunk !== null) tail = pendingFirstChunk + tail;
+
+    if (!live && tail) {
+      const step = Math.max(2, Math.ceil(tail.length / 160));
+      for (let i = step; i < tail.length; i += step) {
+        if (signal?.aborted) break;
+        full = tail.slice(0, i);
+        patch({ content: full, thinking: false });
+        await new Promise((r) => setTimeout(r, 12));
+      }
+      full = tail;
+      patch({ content: full, thinking: false });
+    } else if (tail) {
+      full += tail;
+      patch({ content: full, thinking: false });
     }
   } finally {
-    const suggestions = extractSuggestions(full);
     const clean = stripSuggestionTags(full);
-    useChatStore.setState((s) => ({
-      messages: s.messages.map((m) =>
-        m.id === assistant.id
-          ? { ...m, content: clean || full, streaming: false, suggestions }
-          : m
-      ),
-      speakingPersonaId: null,
-    }));
+    const suggestions = extractSuggestions(full);
+    patch({
+      content: clean || full,
+      streaming: false,
+      thinking: false,
+      suggestions,
+    });
+    useChatStore.setState({ speakingPersonaId: null });
   }
-  return assistant;
+  return stripSuggestionTags(full) || full;
 }
 
 export const useChatStore = create<ChatState>((set, get) => ({
@@ -136,91 +190,50 @@ export const useChatStore = create<ChatState>((set, get) => ({
     abortController = new AbortController();
     set({ isBusy: true, error: null });
 
+    const historyFor = (limit: number): ChatCompletionMessage[] =>
+      get()
+        .messages.slice(-limit)
+        .map((m) => ({
+          role: m.role === "user" ? ("user" as const) : ("assistant" as const),
+          content:
+            m.role === "assistant"
+              ? `${getPersonaById(m.personaId ?? "")?.name ?? "Assistant"} said: ${m.content}`
+              : m.content,
+        }));
+    const systemFor = (persona: Persona) =>
+      personaSystemPrompt(persona, personas, get().tone, "chat");
+
     try {
-      if (mentions.length > 0) {
-        for (const persona of mentions) {
-          await debateLock.run(async () => {
-            const history: ChatCompletionMessage[] = get()
-              .messages.slice(-12)
-              .map((m) => ({
-                role: m.role === "user" ? ("user" as const) : ("assistant" as const),
-                content:
-                  m.role === "assistant"
-                    ? `${getPersonaById(m.personaId ?? "")?.name ?? "Assistant"} said: ${m.content}`
-                    : m.content,
-              }));
-            await streamAssistantTurn({
-              persona,
-              signal: abortController!.signal,
-              messages: [
-                { role: "system", content: personaSystemPrompt(persona, personas, get().tone, "chat") },
-                ...history,
-              ],
-            });
-          });
-        }
-      } else if (personas.length === 1) {
-        const persona = personas[0];
+      const targets =
+        mentions.length > 0
+          ? mentions
+          : [
+              personas.length === 1
+                ? personas[0]
+                : await pickBestResponder({
+                    trimmed,
+                    history: get().messages,
+                    personas,
+                    tone: get().tone,
+                    signal: abortController.signal,
+                  }),
+            ];
+
+      for (const persona of targets) {
+        if (abortController.signal.aborted) break;
         await debateLock.run(async () => {
-          await streamAssistantTurn({
-            persona,
+          await runAssistantStream({
+            personaId: persona.id,
             signal: abortController!.signal,
             messages: [
-              { role: "system", content: personaSystemPrompt(persona, personas, get().tone, "chat") },
-              ...get()
-                .messages.slice(-14)
-                .map((m) => ({
-                  role: m.role === "user" ? ("user" as const) : ("assistant" as const),
-                  content: m.content,
-                })),
-            ],
-          });
-        });
-      } else {
-        // Multiple actives, no explicit mention → hand-raise picks best respondent.
-        set({ isEvaluatingHands: true });
-        const raises = await collectHandRaises(useApiStore.getState().config, {
-          topicOrMessage: trimmed,
-          history: get().messages,
-          activePersonas: personas,
-          tone: get().tone,
-          signal: abortController.signal,
-        });
-        set({ isEvaluatingHands: false, handRaises: raises });
-        const winner = [...raises]
-          .filter((r) => r.wantsToSpeak)
-          .sort((a, b) => b.confidence - a.confidence)[0];
-        const persona =
-          getPersonaById(winner?.personaId ?? "") ??
-          personas[0];
-        await debateLock.run(async () => {
-          await streamAssistantTurn({
-            persona,
-            signal: abortController!.signal,
-            messages: [
-              { role: "system", content: personaSystemPrompt(persona, personas, get().tone, "chat") },
-              ...get()
-                .messages.slice(-14)
-                .map((m) => ({
-                  role: m.role === "user" ? ("user" as const) : ("assistant" as const),
-                  content: m.content,
-                })),
+              { role: "system", content: systemFor(persona) },
+              ...historyFor(14),
             ],
           });
         });
       }
     } catch (err) {
-      const aborted =
-        err instanceof DOMException && err.name === "AbortError";
-      if (!aborted) {
-        set({
-          error: err instanceof Error ? err.message : "Unknown LLM error",
-        });
-      }
-      set((s) => ({
-        messages: s.messages.map((m) => ({ ...m, streaming: false })),
-        speakingPersonaId: null,
-      }));
+      handleLlmError(set, err, "Unknown LLM error");
     } finally {
       set({ isBusy: false, isEvaluatingHands: false });
       abortController = null;
@@ -264,76 +277,37 @@ export const useChatStore = create<ChatState>((set, get) => ({
         .filter((r) => r.wantsToSpeak && r.confidence >= 0.35)
         .sort((a, b) => b.confidence - a.confidence);
       const finalQueue =
-        queue.length > 0 ? queue : raises.sort((a, b) => b.confidence - a.confidence).slice(0, 2);
+        queue.length > 0
+          ? queue
+          : [...raises].sort((a, b) => b.confidence - a.confidence).slice(0, 2);
 
-      set({ isEvaluatingHands: false, handRaises: raises, queueOrder: finalQueue.map((q) => q.personaId) });
+      set({
+        isEvaluatingHands: false,
+        handRaises: raises,
+        queueOrder: finalQueue.map((q) => q.personaId),
+      });
 
-      const priorTurns: { role: "user"; content: string }[] = [];
+      const priorTurns: ChatCompletionMessage[] = [];
       for (const raise of finalQueue) {
         if (signal.aborted) break;
         const personaId = raise.personaId;
         set((s) => ({ queueOrder: s.queueOrder.filter((id) => id !== personaId) }));
         await debateLock.run(async () => {
-          const turnMessages: { role: "user"; content: string }[] = priorTurns.map((t) => ({
-            role: "user",
-            content: t.content,
-          }));
-          let streamed = "";
-          for await (const delta of runDebateTurn(
-            {
-              config: useApiStore.getState().config,
-              topic,
-              history: get().messages,
-              activePersonas: personas,
-              tone: get().tone,
-              signal,
-            },
+          const streamed = await runAssistantStream({
             personaId,
-            turnMessages
-          )) {
-            streamed += delta;
-            set((s) => {
-              const existing = s.messages.find(
-                (m) => m.streaming && m.personaId === personaId
-              );
-              if (existing) {
-                return {
-                  messages: s.messages.map((m) =>
-                    m.id === existing.id ? { ...m, content: streamed } : m
-                  ),
-                };
-              }
-              return {
-                messages: [
-                  ...s.messages,
-                  {
-                    id: nextId(),
-                    role: "assistant",
-                    personaId,
-                    content: streamed,
-                    timestamp: Date.now(),
-                    streaming: true,
-                  },
-                ],
-              };
-            });
-          }
-          set((s) => {
-            const suggestions = extractSuggestions(streamed);
-            const clean = stripSuggestionTags(streamed);
-            return {
-              queueOrder: s.queueOrder,
-              messages: s.messages.map((m) =>
-                m.streaming && m.personaId === personaId
-                  ? {
-                      ...m,
-                      content: clean || streamed,
-                      streaming: false,
-                      suggestions,
-                    }
-                  : m
-              ),
-            };
+            signal,
+            messages: debateTurnMessages(
+              {
+                config: useApiStore.getState().config,
+                topic,
+                history: get().messages,
+                activePersonas: personas,
+                tone: get().tone,
+                signal,
+              },
+              personaId,
+              priorTurns
+            ),
           });
           priorTurns.push({
             role: "user",
@@ -342,17 +316,50 @@ export const useChatStore = create<ChatState>((set, get) => ({
         });
       }
     } catch (err) {
-      const aborted = err instanceof DOMException && err.name === "AbortError";
-      if (!aborted) {
-        set({ error: err instanceof Error ? err.message : "Debate failed" });
-      }
-      set((s) => ({
-        messages: s.messages.map((m) => ({ ...m, streaming: false })),
-        speakingPersonaId: null,
-      }));
+      handleLlmError(set, err, "Debate failed");
     } finally {
       set({ isBusy: false, isEvaluatingHands: false });
       abortController = null;
     }
   },
 }));
+
+function handleLlmError(
+  set: (partial: Partial<ChatState> | ((s: ChatState) => Partial<ChatState>)) => void,
+  err: unknown,
+  fallback: string
+) {
+  const aborted = err instanceof DOMException && err.name === "AbortError";
+  if (!aborted) {
+    set({ error: err instanceof Error ? err.message : fallback });
+  }
+  set((s) => ({
+    messages: s.messages.map((m) => ({ ...m, streaming: false, thinking: false })),
+    speakingPersonaId: null,
+  }));
+}
+
+/** Hand-raise evaluation to pick a respondent when several personas are active. */
+async function pickBestResponder(args: {
+  trimmed: string;
+  history: ChatMessage[];
+  personas: Persona[];
+  tone: DebateTone;
+  signal: AbortSignal;
+}): Promise<Persona> {
+  useChatStore.setState({ isEvaluatingHands: true });
+  const raises = await collectHandRaises(useApiStore.getState().config, {
+    topicOrMessage: args.trimmed,
+    history: args.history,
+    activePersonas: args.personas,
+    tone: args.tone,
+    signal: args.signal,
+  });
+  useChatStore.setState({ isEvaluatingHands: false, handRaises: raises });
+  const winner = [...raises]
+    .filter((r) => r.wantsToSpeak)
+    .sort((a, b) => b.confidence - a.confidence)[0];
+  return (
+    getPersonaById(winner?.personaId ?? "") ?? args.personas[0]
+  );
+}

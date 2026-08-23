@@ -41,7 +41,12 @@ export function MessageBubble({
       <div className="min-w-0 max-w-[85%]">
         <div className="mb-1 flex items-center gap-2 text-xs text-muted">
           <span className="font-semibold text-foreground/90">{persona?.name ?? "System"}</span>
-          {message.streaming && (
+          {message.thinking && (
+            <span className="flex items-center gap-1 animate-pulse text-accent-2">
+              🤔 thinking…
+            </span>
+          )}
+          {!message.thinking && message.streaming && (
             <span className="flex items-center gap-1 text-accent-2">
               <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-accent-2" />
               streaming…
