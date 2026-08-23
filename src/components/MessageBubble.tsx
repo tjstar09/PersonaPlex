@@ -79,7 +79,7 @@ export function MessageBubble({
           )}
         </div>
         {message.suggestions?.map((s, i) => (
-          <SuggestionCard key={i} suggestion={s} onAdd={onAddSuggestedPersona} />
+          <SuggestionCard key={i} suggestion={s} onAction={onAddSuggestedPersona} />
         ))}
       </div>
     </motion.div>

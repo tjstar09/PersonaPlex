@@ -30,6 +30,12 @@ const turnRegistry = new Map<
   { personaId: string; messages: ChatCompletionMessage[] }
 >();
 
+
+/** Messages that participate in LLM context (UI event notices excluded). */
+function llmVisible(messages: ChatMessage[]): ChatMessage[] {
+  return messages.filter((m) => m.kind !== "event");
+}
+
 function buildUserMessage(content: string): ChatMessage {
   return { id: nextId(), role: "user", content, timestamp: Date.now() };
 }
@@ -53,6 +59,7 @@ interface ChatState {
   startDebate: () => Promise<void>;
   moderate: (action: ModeratorAction) => Promise<void>;
   retryMessage: (messageId: string) => Promise<void>;
+  pushEvent: (content: string) => void;
   stop: () => void;
 }
 
@@ -245,6 +252,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
   setTone: (tone) => set({ tone }),
   setTopic: (topic) => set({ topic }),
   clearChat: () => set({ messages: [], handRaises: [], queueOrder: [] }),
+  pushEvent: (content) =>
+    set((s) => ({
+      messages: [
+        ...s.messages,
+        { id: nextId(), role: "assistant", kind: "event", content, timestamp: Date.now() },
+      ],
+    })),
   dismissError: () => set({ error: null }),
 
   stop: () => {
@@ -282,8 +296,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set({ isBusy: true, error: null });
 
     const historyFor = (limit: number): ChatCompletionMessage[] =>
-      get()
-        .messages.slice(-limit)
+      llmVisible(get().messages)
+        .slice(-limit)
         .map((m) => ({
           role: m.role === "user" ? ("user" as const) : ("assistant" as const),
           content:
@@ -303,7 +317,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
                 ? personas[0]
                 : await pickBestResponder({
                     trimmed,
-                    history: get().messages,
+                    history: llmVisible(get().messages),
                     personas,
                     tone: get().tone,
                     signal: abortController.signal,
@@ -389,8 +403,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
       if (action === "conclude") {
         // Moderator synthesizes the final verdict from closing statements.
-        const transcript = get()
-          .messages.slice(-8)
+        const transcript = llmVisible(get().messages)
+          .slice(-8)
           .map((m) => `${getPersonaById(m.personaId ?? "")?.name ?? (m.role === "user" ? "MODERATOR" : "?")}: ${m.content}`)
           .join("\n");
         const verdict = await completeChat(useApiStore.getState().config, [
@@ -465,7 +479,7 @@ async function runHandRaiseRound(
   set({ isEvaluatingHands: true });
   const raises = await collectHandRaises(useApiStore.getState().config, {
     topicOrMessage: moderatorDirective ? `${topic}\n\nMODERATOR: ${moderatorDirective}` : topic,
-    history: get().messages,
+    history: llmVisible(get().messages),
     activePersonas: personas,
     tone: get().tone,
     signal,
@@ -498,7 +512,7 @@ async function runHandRaiseRound(
           {
             config: useApiStore.getState().config,
             topic,
-            history: get().messages,
+            history: llmVisible(get().messages),
             activePersonas: personas,
             tone: get().tone,
             signal,
