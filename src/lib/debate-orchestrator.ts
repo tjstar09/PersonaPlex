@@ -22,6 +22,13 @@ const PROMPT_LOCK =
 const BREVITY_LOCK =
   "LENGTH DISCIPLINE: Follow your OUTPUT limit strictly. Lead with your point — no preamble, no restating the question or topic, no pleasantries, no closing summary of what you just said. One perspective per turn; others will add theirs.";
 
+const OUTPUT_PROTOCOL = `OUTPUT PROTOCOL — MANDATORY: Do ALL your thinking silently. Then wrap your final persona speech in <reply> </reply> tags and output NOTHING else — no text before or after the tags.
+Example: <reply>We're not the problem, we're the fix.</reply>
+The optional [SUGGEST_PERSONA] tag must go INSIDE the reply tags, on its own last line.`;
+
+const SUGGEST_EXAMPLE =
+  'Optionally, if the conversation reveals a missing perspective that another kind of persona should join to help, add inside the reply tags exactly one tag on its own line: [SUGGEST_PERSONA: "Legal Specialist", "Liability angles keep coming up unchecked"]. Invent a specific role and a concrete, conversation-specific reason — never copy this example verbatim, never use placeholder words like "Name" or "Reason". Do not suggest personas already in the roster.';
+
 const HAND_RAISE_SYSTEM = `You are simulating a participant in a multi-persona conversation deciding whether to "raise your hand" to speak next.
 Respond with ONLY a JSON object, no markdown fences, in this exact shape:
 {"wantsToSpeak": boolean, "confidence": number between 0.0 and 1.0, "snippet": "max 12 words on what you would add"}
@@ -50,7 +57,8 @@ export function personaSystemPrompt(
       : "",
     PROMPT_LOCK,
     BREVITY_LOCK,
-    `Optionally, if the conversation reveals a missing perspective that another kind of persona should join to help, end your reply with exactly one tag on its own line: [SUGGEST_PERSONA: "Suggested Name", "One-sentence reason why they should join"]. Do not suggest personas already in the roster.`,
+    OUTPUT_PROTOCOL,
+    SUGGEST_EXAMPLE,
   ]
     .filter(Boolean)
     .join("\n\n");

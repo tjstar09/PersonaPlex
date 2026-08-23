@@ -98,6 +98,7 @@ interface PersonaState {
   premiumUnlocked: boolean;
   toggleActive: (id: string) => void;
   addCustomPersona: (p: Omit<Persona, "id" | "isPrebuilt">) => Persona;
+  updatePersona: (id: string, patch: Partial<Omit<Persona, "id" | "isPrebuilt">>) => void;
   removeCustomPersona: (id: string) => void;
   setPremiumUnlocked: (v: boolean) => void;
 }
@@ -122,6 +123,13 @@ export const usePersonaStore = create<PersonaState>()(
         set((s) => ({ customPersonas: [...s.customPersonas, persona] }));
         return persona;
       },
+      updatePersona: (id, patch) =>
+        set((s) => ({
+          personas: s.personas.map((p) => (p.id === id ? { ...p, ...patch } : p)),
+          customPersonas: s.customPersonas.map((p) =>
+            p.id === id ? { ...p, ...patch } : p
+          ),
+        })),
       removeCustomPersona: (id) =>
         set((s) => ({
           customPersonas: s.customPersonas.filter((p) => p.id !== id),

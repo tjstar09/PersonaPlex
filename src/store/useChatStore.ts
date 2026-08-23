@@ -4,6 +4,7 @@ import { create } from "zustand";
 import type { ChatCompletionMessage } from "@/lib/llm-client";
 import { streamChatCompletion } from "@/lib/llm-client";
 import { ThinkingFilter, stripThinkBlocks } from "@/lib/thinking-filter";
+import { ReplyEnvelopeFilter } from "@/lib/reply-envelope";
 import type { ChatMessage, HandRaise, Persona } from "@/types";
 import { useApiStore } from "./useApiStore";
 import { getPersonaById, usePersonaStore } from "./usePersonaStore";
@@ -78,6 +79,7 @@ async function runAssistantStream(params: {
     }));
 
   const filter = new ThinkingFilter();
+  const envelope = new ReplyEnvelopeFilter();
   let full = "";
   let pendingFirstChunk: string | null = null;
   let live = false;
@@ -94,10 +96,21 @@ async function runAssistantStream(params: {
         patch({ thinking: true });
         continue;
       }
+      if (!delta.content) continue;
 
-      const visible = delta.content ? filter.push(delta.content) : "";
+      // Layer 1: discard everything outside the <reply> envelope
+      // (plain-text chain-of-thought, prompt echoes). While the envelope
+      // hasn't opened yet, surface "thinking" instead of text.
+      const enveloped = envelope.push(delta.content);
+      if (!enveloped) {
+        if (envelope.state === "pre") patch({ thinking: true });
+        continue;
+      }
+
+      // Layer 2: strip any residual <think> blocks inside the reply.
+      const visible = filter.push(enveloped);
       if (!visible) {
-        if (filter.thinking) patch({ thinking: true });
+        if (filter.thinking || envelope.state === "pre") patch({ thinking: true });
         continue;
       }
 
@@ -116,7 +129,7 @@ async function runAssistantStream(params: {
       patch({ content: full, thinking: false });
     }
 
-    let tail = filter.end();
+    let tail = thinkFlush(filter, envelope.end());
     if (pendingFirstChunk !== null) tail = pendingFirstChunk + tail;
 
     if (!live && tail) {
@@ -324,6 +337,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
   },
 }));
+
+/** Flush envelope remainder through the think-filter, then flush the filter. */
+function thinkFlush(filter: ThinkingFilter, envelopeRemainder: string): string {
+  return filter.push(envelopeRemainder) + filter.end();
+}
 
 function handleLlmError(
   set: (partial: Partial<ChatState> | ((s: ChatState) => Partial<ChatState>)) => void,
