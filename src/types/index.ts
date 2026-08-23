@@ -20,6 +20,8 @@ export interface Suggestion {
 export interface ChatMessage {
   id: string;
   role: ChatRole;
+  /** "event" = UI-only notice (e.g. participant joined); never sent to LLMs. */
+  kind?: "chat" | "event";
   personaId?: string;
   content: string;
   timestamp: number;

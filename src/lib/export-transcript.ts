@@ -87,6 +87,11 @@ export function buildMarkdownTranscript(input: ExportInput): string {
   lines.push("## Transcript");
 
   for (const m of visibleMessages(messages)) {
+    if (m.kind === "event") {
+      lines.push("");
+      lines.push(`*${m.content.trim()}*`);
+      continue;
+    }
     const { emoji, name } = speakerHeading(m, personas);
     lines.push("");
     lines.push(`### ${emoji} ${name}`);
@@ -138,6 +143,11 @@ export function buildMarkdownClean(input: ExportInput): string {
   const { messages, personas } = input;
   const lines: string[] = [];
   for (const m of visibleMessages(messages)) {
+    if (m.kind === "event") {
+      lines.push(`*${m.content.trim()}*`);
+      lines.push("");
+      continue;
+    }
     const { emoji, name } = speakerHeading(m, personas);
     lines.push(`**${emoji} ${name}:**`);
     lines.push("");
@@ -190,7 +200,7 @@ export function buildJsonExport(input: ExportInput): string {
       ? { handRaiseEvaluation: handRaises }
       : {}),
     messages: visibleMessages(messages).map((m) => ({
-      role: m.role,
+      role: m.kind === "event" ? "event" : m.role,
       ...(m.personaId ? { personaId: m.personaId } : {}),
       ...(() => {
         const s = speakerHeading(m, personas);
@@ -229,6 +239,10 @@ export function buildPrintHtml(input: ExportInput): string {
   );
 
   for (const m of visibleMessages(messages)) {
+    if (m.kind === "event") {
+      body.push(`<p class="event">${escapeHtml(m.content.trim())}</p>`);
+      continue;
+    }
     const { emoji, name } = speakerHeading(m, personas);
     const t = new Date(m.timestamp);
     body.push(
@@ -245,6 +259,7 @@ export function buildPrintHtml(input: ExportInput): string {
   .meta{color:#5a6072;font-size:0.85rem;margin:0}
   .t{color:#8a90a0;font-size:0.75rem;font-weight:400;margin-left:6px}
   .msg{white-space:normal;border-left:3px solid #e4e6ee;padding:2px 0 2px 12px}
+  .event{text-align:center;color:#7a8194;font-size:0.8rem;font-style:italic;margin:10px 0}
 </style></head><body>${body.join("\n")}</body></html>`;
 }
 

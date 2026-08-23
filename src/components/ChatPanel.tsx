@@ -16,8 +16,8 @@ import {
   type ExportInput,
   type ExportOptions,
 } from "@/lib/export-transcript";
-import type { Suggestion } from "@/types";
 import { MessageBubble } from "./MessageBubble";
+import type { Suggestion } from "@/types";
 
 const DEFAULT_OPTIONS: ExportOptions = {
   includeTimestamps: true,
@@ -25,35 +25,45 @@ const DEFAULT_OPTIONS: ExportOptions = {
   includePersonaInstructions: false,
 };
 
-function addSuggestedPersona(s: Suggestion) {
+/**
+ * Resolve a suggestion card click: add missing personas (auto-activated),
+ * activate existing inactive ones, or route to the upgrade flow at the cap.
+ * Joins are announced in-chat as UI event lines.
+ */
+function resolveSuggestion(s: Suggestion) {
+  const chat = useChatStore.getState();
   const state = usePersonaStore.getState();
-  if (state.customPersonas.some((p) => p.name.toLowerCase() === s.name.toLowerCase()))
-    return;
+  const limit = state.premiumUnlocked ? 10 : 3;
+
   const existing = [...state.personas, ...state.customPersonas].find(
     (p) => p.name.toLowerCase() === s.name.toLowerCase()
   );
-  if (existing) {
-    if (!state.activeIds.includes(existing.id)) {
-      // respect tier guard: only auto-activate if under limit
-      const limit = state.premiumUnlocked ? 10 : 3;
-      if (state.activeIds.length < limit) state.toggleActive(existing.id);
-      else state.setPendingUpgrade(true);
+
+  if (!existing) {
+    if (state.activeIds.length >= limit) {
+      state.setPendingUpgrade(true);
+      return;
     }
+    const created = state.addCustomPersona({
+      name: s.name,
+      avatar: "🧩",
+      tone: "Suggested by roster",
+      systemPrompt: `You are ${s.name}. You joined this conversation because: ${s.reason}. Stay in character and contribute your unique perspective.`,
+      expertiseTags: [s.reason.slice(0, 24)],
+    });
+    state.toggleActive(created.id);
+    chat.pushEvent(`✨ ${created.name} joined the conversation`);
     return;
   }
-  // Tier guard: at cap, route into the upgrade flow instead of silently skipping.
-  const limit = state.premiumUnlocked ? 10 : 3;
+
+  if (state.activeIds.includes(existing.id)) return; // already speaking
+
   if (state.activeIds.length >= limit) {
     state.setPendingUpgrade(true);
     return;
   }
-  state.addCustomPersona({
-    name: s.name,
-    avatar: "🧩",
-    tone: "Suggested by roster",
-    systemPrompt: `You are ${s.name}. You joined this conversation because: ${s.reason}. Stay in character and contribute your unique perspective.`,
-    expertiseTags: [s.reason.slice(0, 24)],
-  });
+  state.toggleActive(existing.id);
+  chat.pushEvent(`✨ ${existing.name} joined the conversation`);
 }
 
 function buildExportInput(): ExportInput {
@@ -271,9 +281,26 @@ export function ChatPanel() {
         )}
 
         <AnimatePresence initial={false}>
-          {messages.map((m) => (
-            <MessageBubble key={m.id} message={m} onAddSuggestedPersona={addSuggestedPersona} />
-          ))}
+          {messages.map((m) =>
+            m.kind === "event" ? (
+              <motion.div
+                key={m.id}
+                initial={{ opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="flex justify-center"
+              >
+                <span className="rounded-full border border-dashed border-line px-3.5 py-1 text-[0.7rem] text-muted/80">
+                  {m.content}
+                </span>
+              </motion.div>
+            ) : (
+              <MessageBubble
+                key={m.id}
+                message={m}
+                onAddSuggestedPersona={resolveSuggestion}
+              />
+            )
+          )}
         </AnimatePresence>
 
         {isEvaluatingHands && (
