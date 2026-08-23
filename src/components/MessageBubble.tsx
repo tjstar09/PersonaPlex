@@ -2,6 +2,7 @@
 
 import { motion } from "framer-motion";
 import { getPersonaById } from "@/store/usePersonaStore";
+import { stripThinkBlocks } from "@/lib/thinking-filter";
 import type { ChatMessage, Suggestion } from "@/types";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 import { SuggestionCard } from "./SuggestionCard";
@@ -58,7 +59,7 @@ export function MessageBubble({
             message.streaming ? "stream-caret" : ""
           }`}
         >
-          <MarkdownRenderer content={message.content || "…"} />
+          <MarkdownRenderer content={stripThinkBlocks(message.content) || "…"} />
         </div>
         {message.suggestions?.map((s, i) => (
           <SuggestionCard key={i} suggestion={s} onAdd={onAddSuggestedPersona} />

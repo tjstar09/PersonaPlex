@@ -4,6 +4,7 @@ import { useState } from "react";
 import { CheckCircle2, KeyRound, Save, ShieldCheck } from "lucide-react";
 import { apiConfigSchema, useApiStore } from "@/store/useApiStore";
 import { usePersonaStore } from "@/store/usePersonaStore";
+import { ModelPicker } from "./ModelPicker";
 
 export function ApiSettings() {
   const config = useApiStore((s) => s.config);
@@ -58,15 +59,12 @@ export function ApiSettings() {
             className="w-full rounded-xl border border-line bg-surface px-3 py-2 text-xs outline-none focus:border-accent"
           />
         </label>
-        <label className="block">
-          <span className="mb-1 block text-[0.68rem] uppercase tracking-wider text-muted">Model Identifier</span>
-          <input
-            value={model}
-            onChange={(e) => setModel(e.target.value)}
-            placeholder="openai/gpt-4o-mini"
-            className="w-full rounded-xl border border-line bg-surface px-3 py-2 text-xs outline-none focus:border-accent"
-          />
-        </label>
+        <ModelPicker
+          value={model}
+          onChange={setModel}
+          baseUrl={baseUrl}
+          apiKey={apiKey}
+        />
         <label className="block">
           <span className="mb-1 block text-[0.68rem] uppercase tracking-wider text-muted">API Key</span>
           <input

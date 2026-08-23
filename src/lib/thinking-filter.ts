@@ -1,16 +1,57 @@
-const OPEN = "<think>";
-const CLOSE = "</think>";
+// Reasoning models mark chain-of-thought in several shapes. We match raw
+// text directly (never rewriting), so tags split across stream chunks or
+// HTML-escaped by providers are still caught.
+const OPENS = [
+  "<think>",
+  "<thinking>",
+  "<reasoning>",
+  "&lt;think&gt;",
+  "&lt;thinking&gt;",
+  "&lt;reasoning&gt;",
+];
 
-/** Remove complete and unterminated <think>…</think> blocks from finished text. */
+const CLOSES = [
+  "</think>",
+  "</thinking>",
+  "</reasoning>",
+  "&lt;/think&gt;",
+  "&lt;/thinking&gt;",
+  "&lt;/reasoning&gt;",
+];
+
+interface TokenHit {
+  index: number;
+  length: number;
+}
+
+function findEarliest(buf: string, tokens: string[]): TokenHit | null {
+  let best: TokenHit | null = null;
+  for (const token of tokens) {
+    const idx = buf.indexOf(token);
+    if (idx !== -1 && (best === null || idx < best.index)) {
+      best = { index: idx, length: token.length };
+    }
+  }
+  return best;
+}
+
+function partialSuffixLength(buf: string, tokens: string[]): number {
+  const maxLen = Math.max(...tokens.map((t) => t.length));
+  for (let len = Math.min(maxLen - 1, buf.length); len > 0; len--) {
+    const suffix = buf.slice(-len);
+    if (tokens.some((t) => t.startsWith(suffix))) return len;
+  }
+  return 0;
+}
+
+/** Remove complete and unterminated think blocks from finished text. */
 export function stripThinkBlocks(text: string): string {
-  return text
-    .replace(new RegExp(`${OPEN}[\\s\\S]*?${CLOSE}`, "g"), "")
-    .replace(new RegExp(`${OPEN}[\\s\\S]*$`), "")
-    .trimStart();
+  const filter = new ThinkingFilter();
+  return filter.push(text).concat(filter.end()).trimStart();
 }
 
 /**
- * Incrementally filters reasoning-model <think> blocks out of a token
+ * Incrementally filters reasoning-model chain-of-thought out of a token
  * stream. Holds back partial tag fragments across chunk boundaries.
  */
 export class ThinkingFilter {
@@ -23,24 +64,24 @@ export class ThinkingFilter {
     let out = "";
     while (this.buf.length > 0) {
       if (!this.inThink) {
-        const openIdx = this.buf.indexOf(OPEN);
-        if (openIdx === -1) {
-          const keep = this.partialSuffix(this.buf, OPEN);
+        const open = findEarliest(this.buf, OPENS);
+        if (!open) {
+          const keep = partialSuffixLength(this.buf, OPENS);
           out += this.buf.slice(0, this.buf.length - keep);
           this.buf = this.buf.slice(this.buf.length - keep);
           break;
         }
-        out += this.buf.slice(0, openIdx);
-        this.buf = this.buf.slice(openIdx + OPEN.length);
+        out += this.buf.slice(0, open.index);
+        this.buf = this.buf.slice(open.index + open.length);
         this.inThink = true;
       } else {
-        const closeIdx = this.buf.indexOf(CLOSE);
-        if (closeIdx === -1) {
-          const keep = this.partialSuffix(this.buf, CLOSE);
+        const close = findEarliest(this.buf, CLOSES);
+        if (!close) {
+          const keep = partialSuffixLength(this.buf, CLOSES);
           this.buf = this.buf.slice(this.buf.length - keep);
           break;
         }
-        this.buf = this.buf.slice(closeIdx + CLOSE.length);
+        this.buf = this.buf.slice(close.index + close.length);
         this.inThink = false;
       }
     }
@@ -60,12 +101,5 @@ export class ThinkingFilter {
 
   get thinking(): boolean {
     return this.inThink;
-  }
-
-  private partialSuffix(buf: string, tag: string): number {
-    for (let len = Math.min(tag.length - 1, buf.length); len > 0; len--) {
-      if (buf.endsWith(tag.slice(0, len))) return len;
-    }
-    return 0;
   }
 }

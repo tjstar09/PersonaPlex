@@ -3,7 +3,7 @@
 import { create } from "zustand";
 import type { ChatCompletionMessage } from "@/lib/llm-client";
 import { streamChatCompletion } from "@/lib/llm-client";
-import { ThinkingFilter } from "@/lib/thinking-filter";
+import { ThinkingFilter, stripThinkBlocks } from "@/lib/thinking-filter";
 import type { ChatMessage, HandRaise, Persona } from "@/types";
 import { useApiStore } from "./useApiStore";
 import { getPersonaById, usePersonaStore } from "./usePersonaStore";
@@ -134,7 +134,8 @@ async function runAssistantStream(params: {
       patch({ content: full, thinking: false });
     }
   } finally {
-    const clean = stripSuggestionTags(full);
+    const safe = stripThinkBlocks(full);
+    const clean = stripSuggestionTags(safe);
     const suggestions = extractSuggestions(full);
     patch({
       content: clean || full,
