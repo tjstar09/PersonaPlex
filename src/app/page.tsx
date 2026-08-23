@@ -1,69 +1,103 @@
-import Image from "next/image";
+"use client";
+
+import { useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
+import { AlertTriangle, Sparkles, X } from "lucide-react";
+import { useMounted } from "@/hooks/useFeatureFlag";
+import { usePersonaStore } from "@/store/usePersonaStore";
+import { useChatStore } from "@/store/useChatStore";
+import { PersonaRoster } from "@/components/PersonaRoster";
+import { ChatPanel } from "@/components/ChatPanel";
+import { ChatInput } from "@/components/ChatInput";
+import { DebatePanel } from "@/components/DebatePanel";
+import { ApiSettings } from "@/components/ApiSettings";
+import { UpgradeModal } from "@/components/UpgradeModal";
+
+function Header() {
+  const premiumUnlocked = usePersonaStore((s) => s.premiumUnlocked);
+  return (
+    <header className="flex items-center justify-between px-5 py-3.5">
+      <div className="flex items-center gap-2.5">
+        <div
+          className="flex h-9 w-9 items-center justify-center rounded-2xl bg-accent text-lg"
+          style={{ boxShadow: "var(--glow-accent)" }}
+        >
+          🎭
+        </div>
+        <div>
+          <div className="text-[0.95rem] font-semibold leading-tight tracking-tight">
+            PersonaPlex
+          </div>
+          <div className="text-[0.68rem] leading-tight text-muted">
+            Multi-persona chat &amp; debate stage · 100% client-side
+          </div>
+        </div>
+      </div>
+      <AnimatePresence>
+        {premiumUnlocked && (
+          <motion.span
+            initial={{ opacity: 0, scale: 0.85 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0 }}
+            className="flex items-center gap-1.5 rounded-full border border-accent/60 bg-accent-soft px-3 py-1 text-xs font-medium text-accent"
+          >
+            <Sparkles size={12} /> Premium Active
+          </motion.span>
+        )}
+      </AnimatePresence>
+    </header>
+  );
+}
 
 export default function Home() {
-  return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
+  const mounted = useMounted();
+  const [upgradeOpen, setUpgradeOpen] = useState(false);
+  const error = useChatStore((s) => s.error);
+  const dismissError = useChatStore((s) => s.dismissError);
+
+  if (!mounted) {
+    return (
+      <main className="flex min-h-screen items-center justify-center">
+        <div className="text-3xl">🎭</div>
       </main>
-    </div>
+    );
+  }
+
+  return (
+    <main className="mx-auto flex h-screen max-w-[1600px] flex-col">
+      <Header />
+      <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 px-4 pb-4 lg:grid-cols-[320px_minmax(0,1fr)_340px]">
+        <section className="hidden min-h-0 lg:flex lg:flex-col">
+          <PersonaRoster onRequestUpgrade={() => setUpgradeOpen(true)} />
+        </section>
+        <section className="flex min-h-0 flex-col gap-3">
+          <ChatPanel />
+          <ChatInput />
+        </section>
+        <section className="hidden min-h-0 flex-col gap-4 overflow-y-auto pr-1 lg:flex">
+          <DebatePanel />
+          <ApiSettings />
+        </section>
+      </div>
+
+      <UpgradeModal open={upgradeOpen} onClose={() => setUpgradeOpen(false)} />
+
+      <AnimatePresence>
+        {error && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 20 }}
+            className="fixed bottom-6 left-1/2 z-50 flex max-w-lg -translate-x-1/2 items-start gap-2.5 rounded-2xl border border-danger/50 bg-background/95 px-4 py-3 text-sm shadow-xl backdrop-blur"
+          >
+            <AlertTriangle size={16} className="mt-0.5 shrink-0 text-danger" />
+            <span className="min-w-0 break-words">{error}</span>
+            <button onClick={() => dismissError()} className="shrink-0 rounded p-0.5 text-muted hover:text-foreground">
+              <X size={14} />
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </main>
   );
 }
