@@ -141,7 +141,7 @@ function ExportMenu() {
             initial={{ opacity: 0, y: -4 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -4 }}
-            className="glass absolute right-0 top-full z-30 mt-1 w-60 overflow-hidden rounded-2xl bg-background/95 p-1"
+            className="glass-strong absolute right-0 top-full z-30 mt-1 w-60 overflow-hidden rounded-2xl p-1"
           >
             <button
               className="block w-full truncate rounded-lg px-3 py-2 text-left text-xs transition hover:bg-white/5"

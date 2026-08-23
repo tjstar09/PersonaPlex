@@ -96,7 +96,7 @@ export function ChatInput() {
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 8 }}
-            className="glass absolute bottom-full left-4 z-20 mb-2 w-72 overflow-hidden rounded-2xl"
+            className="glass-strong absolute bottom-full left-4 z-20 mb-2 w-72 overflow-hidden rounded-2xl"
           >
             <div className="px-3 pt-2 text-[0.7rem] uppercase tracking-wider text-muted">
               Call a persona

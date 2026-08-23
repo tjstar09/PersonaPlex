@@ -109,7 +109,7 @@ export function ModelPicker({ value, onChange, baseUrl, apiKey }: ModelPickerPro
             initial={{ opacity: 0, y: -4 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -4 }}
-            className="glass absolute left-0 right-0 z-30 mt-1 max-h-56 overflow-y-auto rounded-xl bg-background/95 p-1"
+            className="glass-strong absolute left-0 right-0 z-30 mt-1 max-h-56 overflow-y-auto rounded-xl p-1"
           >
             {loading && (
               <div className="flex items-center gap-2 px-3 py-2 text-xs text-muted">

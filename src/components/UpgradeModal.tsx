@@ -30,7 +30,7 @@ export function UpgradeModal({ open, onClose }: { open: boolean; onClose: () => 
             animate={{ scale: 1, y: 0 }}
             exit={{ scale: 0.92, y: 16 }}
             onClick={(e) => e.stopPropagation()}
-            className="glass relative w-full max-w-sm overflow-hidden rounded-3xl bg-background/95 p-6 text-center"
+            className="glass-strong relative w-full max-w-sm overflow-hidden rounded-3xl p-6 text-center"
           >
             <button
               onClick={onClose}

@@ -119,7 +119,7 @@ function PersonaForm({
         exit={{ scale: 0.94, y: 12 }}
         onClick={(e) => e.stopPropagation()}
         onSubmit={submit}
-        className="glass max-h-[90vh] w-full max-w-md space-y-3 overflow-y-auto rounded-3xl bg-background/95 p-5"
+        className="glass-strong max-h-[90vh] w-full max-w-md space-y-3 overflow-y-auto rounded-3xl p-5"
       >
         <div className="flex items-center justify-between">
           <h2 className="text-base font-semibold">
