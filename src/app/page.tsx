@@ -2,7 +2,7 @@
 
 import { AnimatePresence, motion } from "framer-motion";
 import { AlertTriangle, Sparkles, X } from "lucide-react";
-import { useMounted } from "@/hooks/useFeatureFlag";
+import { useMounted, usePremiumStatus } from "@/hooks/useFeatureFlag";
 import { usePersonaStore } from "@/store/usePersonaStore";
 import { useChatStore } from "@/store/useChatStore";
 import { PersonaRoster } from "@/components/PersonaRoster";
@@ -13,7 +13,7 @@ import { ApiSettings } from "@/components/ApiSettings";
 import { UpgradeModal } from "@/components/UpgradeModal";
 
 function Header() {
-  const premiumUnlocked = usePersonaStore((s) => s.premiumUnlocked);
+  const premium = usePremiumStatus();
   return (
     <header className="flex items-center justify-between px-5 py-3.5">
       <div className="flex items-center gap-2.5">
@@ -33,14 +33,20 @@ function Header() {
         </div>
       </div>
       <AnimatePresence>
-        {premiumUnlocked && (
+        {premium.active && (
           <motion.span
             initial={{ opacity: 0, scale: 0.85 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0 }}
             className="flex items-center gap-1.5 rounded-full border border-accent/60 bg-accent-soft px-3 py-1 text-xs font-medium text-accent"
+            title={
+              premium.source === "promo"
+                ? `Promo trial — ${premium.daysLeft} day(s) remaining`
+                : "Manually enabled premium mock"
+            }
           >
-            <Sparkles size={12} /> Premium Active
+            <Sparkles size={12} />
+            {premium.source === "promo" ? `Premium · ${premium.daysLeft}d left` : "Premium Active"}
           </motion.span>
         )}
       </AnimatePresence>

@@ -1,8 +1,10 @@
 "use client";
 
+import { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Crown, Lock, X } from "lucide-react";
+import { CheckCircle2, Crown, Lock, Ticket, X } from "lucide-react";
 import { useFeatureFlag } from "@/hooks/useFeatureFlag";
+import { usePromoStore } from "@/store/usePromoStore";
 
 const PERKS = [
   "Up to 10 simultaneous active personas",
@@ -71,9 +73,71 @@ export function UpgradeModal({ open, onClose }: { open: boolean; onClose: () => 
             >
               ✨ Unlock Premium (mock)
             </button>
+
+            <PromoCodeBox onRedeemed={onClose} />
           </motion.div>
         </motion.div>
       )}
     </AnimatePresence>
+  );
+}
+
+function PromoCodeBox({ onRedeemed }: { onRedeemed: () => void }) {
+  const redeem = usePromoStore((s) => s.redeem);
+  const [code, setCode] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<number | null>(null);
+
+  async function apply(e: React.FormEvent) {
+    e.preventDefault();
+    if (busy || !code.trim()) return;
+    setBusy(true);
+    setError(null);
+    const result = await redeem(code);
+    setBusy(false);
+    if (!result.ok) {
+      setError(result.error ?? "Invalid code");
+      return;
+    }
+    setSuccess(result.daysLeft ?? 7);
+    setCode("");
+    setTimeout(onRedeemed, 1400);
+  }
+
+  return (
+    <div className="mt-4 rounded-2xl border border-line p-3">
+      <div className="mb-2 flex items-center gap-1.5 text-[0.7rem] uppercase tracking-wider text-muted">
+        <Ticket size={12} /> Have a promo code?
+      </div>
+      <form onSubmit={apply} className="flex gap-2">
+        <input
+          value={code}
+          onChange={(e) => {
+            setCode(e.target.value);
+            setError(null);
+          }}
+          placeholder="Secret code"
+          autoComplete="off"
+          disabled={success !== null}
+          className="min-w-0 flex-1 rounded-xl border border-line bg-surface px-3 py-2 text-sm tracking-widest uppercase outline-none focus:border-accent disabled:opacity-50"
+        />
+        <button
+          type="submit"
+          disabled={busy || !code.trim() || success !== null}
+          className="shrink-0 rounded-xl border border-accent/60 bg-accent/15 px-3 py-2 text-xs font-medium transition hover:bg-accent/25 disabled:opacity-40"
+        >
+          Apply
+        </button>
+      </form>
+      {error && (
+        <div className="mt-2 text-xs text-danger">{error}</div>
+      )}
+      {success !== null && (
+        <div className="mt-2 flex items-center gap-1.5 text-xs font-medium" style={{ color: "#34d399" }}>
+          <CheckCircle2 size={13} /> Premium active for {success} days — enjoy!
+        </div>
+      )}
+    </div>
   );
 }
