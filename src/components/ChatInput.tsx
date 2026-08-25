@@ -122,7 +122,7 @@ export function ChatInput() {
         )}
       </AnimatePresence>
 
-      <div className="glass flex items-end gap-2 rounded-3xl p-2 focus-within:border-line-strong">
+      <div className="glass flex items-end gap-2 rounded-3xl p-2 focus-within:border-line-strong safe-bottom pb-safe">
         <textarea
           ref={textareaRef}
           rows={1}
@@ -139,6 +139,12 @@ export function ChatInput() {
           }}
           onKeyDown={handleKeyDown}
           className="max-h-40 flex-1 resize-none bg-transparent px-3 py-2.5 text-[0.92rem] outline-none placeholder:text-muted/70 disabled:opacity-50"
+          inputMode="text"
+          enterKeyHint="send"
+          autoComplete="off"
+          autoCapitalize="sentences"
+          autoCorrect="on"
+          spellCheck={true}
         />
         <button
           onClick={() => {

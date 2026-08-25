@@ -70,20 +70,72 @@ export default function Home() {
   }
 
   return (
-    <main className="mx-auto flex h-screen max-w-[1600px] flex-col">
-      <Header />
-      <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 px-4 pb-4 lg:grid-cols-[320px_minmax(0,1fr)_340px]">
-        <section className="hidden min-h-0 lg:flex lg:flex-col">
+    <main className="app-layout">
+      <header className="app-header">
+        <Header />
+      </header>
+      
+      {/* Mobile sidebar toggle button */}
+      <button
+        className="show-mobile fixed top-16 left-4 z-40 touch-target glass-strong p-2"
+        onClick={() => document.body.classList.add('sidebar-open')}
+        aria-label="Open persona roster"
+      >
+        🎭
+      </button>
+
+      {/* Sidebar - mobile drawer, tablet+ visible */}
+      <aside className="app-sidebar side-drawer hide-mobile lg:flex lg:flex-col lg:relative lg:transform-none lg:shadow-none lg:border-r lg:border-line lg:bg-transparent lg:z-auto">
+        <div className="lg:hidden flex items-center justify-between p-3 border-b border-line">
+          <span className="font-semibold">Persona Roster</span>
+          <button
+            onClick={() => document.body.classList.remove('sidebar-open')}
+            className="touch-target p-2"
+            aria-label="Close persona roster"
+          >
+            ✕
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto">
           <PersonaRoster onRequestUpgrade={() => setUpgradeOpen(true)} />
-        </section>
-        <section className="flex min-h-0 flex-col gap-3">
-          <ChatPanel />
-          <ChatInput />
-        </section>
-        <section className="hidden min-h-0 flex-col gap-4 overflow-y-auto pr-1 lg:flex">
+        </div>
+      </aside>
+
+      {/* Mobile sidebar backdrop */}
+      <div
+        className="drawer-backdrop lg:hidden"
+        onClick={() => document.body.classList.remove('sidebar-open')}
+        aria-hidden="true"
+      />
+
+      <main className="app-main flex flex-col min-h-0">
+        <ChatPanel />
+        <ChatInput />
+      </main>
+
+      {/* Right panel - mobile bottom sheet, desktop visible */}
+      <aside className="app-right hide-mobile lg:flex lg:flex-col lg:overflow-y-auto pr-1">
+        <DebatePanel />
+        <ApiSettings />
+      </aside>
+
+      {/* Mobile bottom sheet for right panel */}
+      <div className="bottom-sheet show-mobile lg:hidden" id="right-sheet" role="dialog" aria-label="Debate controls and settings">
+        <div className="bottom-sheet-handle" />
+        <div className="bottom-sheet-content">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="font-semibold">Controls & Settings</h2>
+            <button
+              onClick={() => document.body.classList.remove('right-sheet-open')}
+              className="touch-target p-2"
+              aria-label="Close panel"
+            >
+              ✕
+            </button>
+          </div>
           <DebatePanel />
           <ApiSettings />
-        </section>
+        </div>
       </div>
 
       <UpgradeModal open={upgradeOpen} onClose={() => setUpgradeOpen(false)} />
