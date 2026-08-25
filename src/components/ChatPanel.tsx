@@ -249,12 +249,21 @@ export function ChatPanel() {
 
   return (
     <div className="glass relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-3xl">
-      <div className="flex items-center justify-between border-b border-line px-5 py-3">
+            <div className="flex items-center justify-between border-b border-line px-5 py-3">
         <div className="flex items-center gap-2 text-sm font-medium">
           <Radio size={15} className="text-accent-2" />
-          Universal Chat &amp; Debate Stage
+          Universal Chat & Debate Stage
         </div>
         <div className="flex items-center gap-1">
+          {/* Mobile trigger for right panel bottom sheet */}
+          <button
+            className="show-mobile touch-target glass-strong p-2"
+            onClick={() => document.body.classList.add('right-sheet-open')}
+            aria-label="Open debate controls"
+            title="Open debate controls"
+          >
+            ⚙️
+          </button>
           <ExportMenu />
           <button
             onClick={clearChat}
@@ -264,56 +273,6 @@ export function ChatPanel() {
             <Trash2 size={13} /> Clear
           </button>
         </div>
-      </div>
-
-      <div className="flex-1 space-y-4 overflow-y-auto px-5 py-4">
-        {messages.length === 0 && !isEvaluatingHands && (
-          <div className="flex h-full flex-col items-center justify-center gap-3 text-center text-muted">
-            <div className="text-5xl">🎭</div>
-            <p className="max-w-sm text-sm leading-relaxed">
-              Activate personas on the left, then chat directly — or set a topic
-              and launch a hand-raised multi-persona debate.
-            </p>
-            <p className="text-xs text-muted/70">
-              Tip: type <code className="rounded bg-white/10 px-1">@</code> in the input to call out a persona mid-conversation.
-            </p>
-          </div>
-        )}
-
-        <AnimatePresence initial={false}>
-          {messages.map((m) =>
-            m.kind === "event" ? (
-              <motion.div
-                key={m.id}
-                initial={{ opacity: 0, y: 4 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="flex justify-center"
-              >
-                <span className="rounded-full border border-dashed border-line px-3.5 py-1 text-[0.7rem] text-muted/80">
-                  {m.content}
-                </span>
-              </motion.div>
-            ) : (
-              <MessageBubble
-                key={m.id}
-                message={m}
-                onAddSuggestedPersona={resolveSuggestion}
-              />
-            )
-          )}
-        </AnimatePresence>
-
-        {isEvaluatingHands && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex gap-2.5">
-            <div className="mt-0.5 flex h-9 w-9 items-center justify-center rounded-2xl border border-line bg-surface-strong text-lg">
-              🖐️
-            </div>
-            <div className="glass rounded-3xl rounded-tl-md px-4 py-3 text-sm text-muted">
-              Personas are evaluating the floor… collecting hand-raises.
-            </div>
-          </motion.div>
-        )}
-        <div ref={bottomRef} />
       </div>
     </div>
   );
