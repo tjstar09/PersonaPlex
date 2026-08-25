@@ -1,10 +1,30 @@
 # 🎭 PersonaPlex
 
+```text
+╔═══════════════════════════════════════════════════════════════════╗
+║  ██████╗ ███████╗███████╗████████╗███████╗██╗  ██╗ ██████╗ ██████╗  ║
+║  ██╔══██╗██╔════╝██╔════╝╚══██╔══╝██╔════╝██║  ██║██╔═══██╗██╔══██╗ ║
+║  ██████╔╝█████╗  ███████╗   ██║   ███████╗███████║██║   ██║██████╔╝ ║
+║  ██╔══██╗██╔════╝╚════██║   ██║   ╚════██║██╔══██║██║   ██║██╔══██╗ ║
+║  ██████╔╝███████╗███████║   ██║   ███████║██║  ██║╚██████╔╝██║  ██║ ║
+║  ╚═════╝ ╚══════╝╚══════╝   ══╝   ╚══════╝╚══════╝ ╚═════╝ ╚══════╝ ║
+╠═══════════════════════════════════════════════════════════════════╣
+║  🌐  https://tjstar09.github.io/PersonaPlex/                        ║
+║  ┌─────────────────────────────────────────────────────────────────┐ ║
+║  │ 🎭 PersonaPlex  █  Multi-Persona AI Chat & Debate Stage         │ ║
+║  │ 💬 Chat · ⚔️ Debate · 🎭 15 Personas · 🔐 BYO Key               │ ║
+║  │ 📱 Mobile version: 🚧 coming soon  |  📲 Mobile app: 🚧 soon     │ ║
+║  └─────────────────────────────────────────────────────────────────┘ ║
+╚═══════════════════════════════════════════════════════════════════╝
+```
+
 **A zero-backend, client-side AI persona chat & debate stage.** Bring your own
 OpenAI-compatible API key (OpenRouter, gateways, direct providers), assemble a
 roster of AI personas, and run everything from casual 1-on-1 chats to fully
 moderated multi-persona debates — 100% in your browser. No server, no database,
 keys never leave your localStorage.
+
+[🚀 **Launch PersonaPlex Live**](https://tjstar09.github.io/PersonaPlex/) →
 
 ---
 
