@@ -280,6 +280,47 @@ body {
   visibility: visible;
 }
 
+/* Body-class triggers — page.tsx toggles classes on <body> */
+body.sidebar-open .side-drawer {
+  transform: translateX(0);
+}
+body.sidebar-open .drawer-backdrop {
+  opacity: 1;
+  visibility: visible;
+}
+body.right-sheet-open .bottom-sheet {
+  transform: translateY(0);
+}
+
+/* Ensure drawer & bottom-sheet correctly layer as grid items vs overlays */
+@media (min-width: 768px) {
+  .side-drawer {
+    position: static !important;
+    width: auto !important;
+    max-width: none !important;
+    transform: none !important;
+    box-shadow: none !important;
+    border-right: 1px solid var(--line);
+    z-index: auto !important;
+    transition: none !important;
+    height: auto;
+  }
+  .drawer-backdrop {
+    display: none !important;
+  }
+}
+@media (min-width: 1024px) {
+  .bottom-sheet {
+    display: none !important;
+  }
+}
+@media (max-width: 767px) {
+  /* page.tsx adds hide-mobile to the sidebar; drawer must still render off-canvas */
+  .app-sidebar.hide-mobile {
+    display: flex !important;
+  }
+}
+
 /* ============================================================================
    HOVER / POINTER MEDIA QUERIES - Touch-first, enhance for mouse
    ============================================================================ */
