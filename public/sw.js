@@ -1,6 +1,8 @@
 // PersonaPlex PWA — app-shell cache (network-first for API, cache-first for shell)
-const CACHE_NAME = "personaplex-shell-v1";
-const SHELL_URLS = ["/", "/manifest.json"];
+// Bump to v2 to bust stale v1 shell that cached absolute "/" + old JS and caused React #185 to persist.
+const CACHE_NAME = "personaplex-shell-v2";
+const SCOPE = new URL(self.registration.scope).pathname; // "/PersonaPlex/" on Pages, "/" locally
+const SHELL_URLS = [SCOPE, `${SCOPE}manifest.json`];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
