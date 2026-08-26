@@ -18,6 +18,7 @@ import {
 } from "@/lib/export-transcript";
 import { MessageBubble } from "./MessageBubble";
 import type { Suggestion } from "@/types";
+import { usePullToRefresh } from "@/lib/swipe-gesture";
 
 const DEFAULT_OPTIONS: ExportOptions = {
   includeTimestamps: true,
@@ -241,15 +242,24 @@ export function ChatPanel() {
   const isEvaluatingHands = useChatStore((s) => s.isEvaluatingHands);
   const clearChat = useChatStore((s) => s.clearChat);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
 
   const lastContent = messages[messages.length - 1]?.content;
   useEffect(() => {
     bottomRef.current?.scrollIntoView();
   }, [messages.length, lastContent]);
 
+  const { isPulling, pullDistance, isRefreshing } = usePullToRefresh(
+    messagesContainerRef,
+    async () => {
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+    },
+    80
+  );
+
   return (
     <div className="glass relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-3xl">
-            <div className="flex items-center justify-between border-b border-line px-5 py-3">
+      <div className="flex items-center justify-between border-b border-line px-5 py-3">
         <div className="flex items-center gap-2 text-sm font-medium">
           <Radio size={15} className="text-accent-2" />
           Universal Chat & Debate Stage
@@ -273,6 +283,89 @@ export function ChatPanel() {
             <Trash2 size={13} /> Clear
           </button>
         </div>
+      </div>
+
+      <div
+        ref={messagesContainerRef}
+        className="chat-messages relative flex-1 space-y-4 overflow-y-auto px-5 py-4"
+        style={{ contentVisibility: "auto" } as React.CSSProperties}
+      >
+        {isPulling && (
+          <div
+            className="absolute top-0 left-0 right-0 z-10 flex items-center justify-center py-2 pointer-events-none"
+            style={{ transform: `translateY(${Math.min(pullDistance, 80)}px)` }}
+          >
+            <motion.div
+              animate={{ rotate: pullDistance >= 80 ? 180 : 0 }}
+              transition={{ duration: 0.2 }}
+              className="flex items-center gap-2 text-sm text-muted"
+            >
+              <span className="text-[0.7rem]">
+                {pullDistance >= 80 ? "Release to refresh" : "Pull to refresh"}
+              </span>
+            </motion.div>
+          </div>
+        )}
+
+        {isRefreshing && (
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 px-4 py-2 rounded-xl glass-strong text-sm text-muted">
+            <motion.span
+              animate={{ rotate: 360 }}
+              transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+            >
+              ⟳
+            </motion.span>
+            Refreshing…
+          </div>
+        )}
+
+        {messages.length === 0 && !isEvaluatingHands && (
+          <div className="flex h-full flex-col items-center justify-center gap-3 text-center text-muted">
+            <div className="text-5xl">🎭</div>
+            <p className="max-w-sm text-sm leading-relaxed">
+              Activate personas on the left, then chat directly — or set a topic
+              and launch a hand-raised multi-persona debate.
+            </p>
+            <p className="text-xs text-muted/70">
+              Tip: type <code className="rounded bg-white/10 px-1">@</code> in the input to call out a persona mid-conversation.
+            </p>
+          </div>
+        )}
+
+        <AnimatePresence initial={false}>
+          {messages.map((m) =>
+            m.kind === "event" ? (
+              <motion.div
+                key={m.id}
+                initial={{ opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="flex justify-center"
+              >
+                <span className="rounded-full border border-dashed border-line px-3.5 py-1 text-[0.7rem] text-muted/80">
+                  {m.content}
+                </span>
+              </motion.div>
+            ) : (
+              <MessageBubble
+                key={m.id}
+                message={m}
+                onAddSuggestedPersona={resolveSuggestion}
+              />
+            )
+          )}
+        </AnimatePresence>
+
+        {isEvaluatingHands && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex gap-2.5">
+            <div className="mt-0.5 flex h-9 w-9 items-center justify-center rounded-2xl border border-line bg-surface-strong text-lg">
+              🖐️
+            </div>
+            <div className="glass rounded-3xl rounded-tl-md px-4 py-3 text-sm text-muted">
+              Personas are evaluating the floor… collecting hand-raises.
+            </div>
+          </motion.div>
+        )}
+        <div ref={bottomRef} />
       </div>
     </div>
   );

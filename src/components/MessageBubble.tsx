@@ -1,5 +1,6 @@
 "use client";
 
+import { memo } from "react";
 import { motion } from "framer-motion";
 import { RotateCcw } from "lucide-react";
 import { getPersonaById } from "@/store/usePersonaStore";
@@ -9,7 +10,7 @@ import type { ChatMessage, Suggestion } from "@/types";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 import { SuggestionCard } from "./SuggestionCard";
 
-export function MessageBubble({
+export const MessageBubble = memo(function MessageBubble({
   message,
   onAddSuggestedPersona,
 }: {
@@ -84,4 +85,4 @@ export function MessageBubble({
       </div>
     </motion.div>
   );
-}
+});
