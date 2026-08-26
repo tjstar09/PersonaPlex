@@ -10,14 +10,15 @@ interface BeforeInstallPromptEvent extends Event {
 export function usePWAInstall() {
   const [deferred, setDeferred] = useState<BeforeInstallPromptEvent | null>(null);
   const [isInstalled, setIsInstalled] = useState(false);
-  const [isStandalone, setIsStandalone] = useState(false);
+  const [isStandalone, setIsStandalone] = useState(() =>
+    typeof window !== "undefined" ? window.matchMedia("(display-mode: standalone)").matches : false
+  );
 
   useEffect(() => {
-    // Detect standalone display mode
+    // Subscribe to standalone display mode changes
     const mq = window.matchMedia("(display-mode: standalone)");
-    setIsStandalone(mq.matches);
     const onChange = (e: MediaQueryListEvent) => setIsStandalone(e.matches);
-    mq.addEventListener?.("change", onChange);
+    mq.addEventListener("change", onChange);
 
     function onBIP(e: Event) {
       e.preventDefault();
