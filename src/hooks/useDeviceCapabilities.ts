@@ -12,11 +12,12 @@ interface Capabilities {
   saveData: boolean;
 }
 
+const SERVER_CAPS: Capabilities = { isLowEnd: false, cores: null, memoryGB: null, effectiveType: undefined, saveData: false };
 let cached: Capabilities | null = null;
 
 function getSnapshot(): Capabilities {
   if (typeof navigator === "undefined") {
-    return cached ?? (cached = { isLowEnd: false, cores: null, memoryGB: null, effectiveType: undefined, saveData: false });
+    return SERVER_CAPS;
   }
   const nav = navigator as unknown as Record<string, unknown>;
   const cores = typeof nav.hardwareConcurrency === "number" ? (nav.hardwareConcurrency as number) : null;
