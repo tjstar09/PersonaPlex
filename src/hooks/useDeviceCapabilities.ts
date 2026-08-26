@@ -12,9 +12,11 @@ interface Capabilities {
   saveData: boolean;
 }
 
+let cached: Capabilities | null = null;
+
 function getSnapshot(): Capabilities {
   if (typeof navigator === "undefined") {
-    return { isLowEnd: false, cores: null, memoryGB: null, effectiveType: undefined, saveData: false };
+    return cached ?? (cached = { isLowEnd: false, cores: null, memoryGB: null, effectiveType: undefined, saveData: false });
   }
   const nav = navigator as unknown as Record<string, unknown>;
   const cores = typeof nav.hardwareConcurrency === "number" ? (nav.hardwareConcurrency as number) : null;
@@ -23,7 +25,6 @@ function getSnapshot(): Capabilities {
   const effectiveType = conn?.effectiveType as EffectiveType | undefined;
   const saveData = Boolean(conn?.saveData);
 
-  // Heuristic: low-end if any signal is constrained
   const isLowEnd =
     (cores !== null && cores <= 4) ||
     (memoryGB !== null && memoryGB <= 4) ||
@@ -31,7 +32,18 @@ function getSnapshot(): Capabilities {
     effectiveType === "slow-2g" ||
     effectiveType === "2g";
 
-  return { isLowEnd, cores, memoryGB, effectiveType, saveData };
+  if (
+    cached &&
+    cached.cores === cores &&
+    cached.memoryGB === memoryGB &&
+    cached.effectiveType === effectiveType &&
+    cached.saveData === saveData &&
+    cached.isLowEnd === isLowEnd
+  ) {
+    return cached;
+  }
+  cached = { isLowEnd, cores, memoryGB, effectiveType, saveData };
+  return cached;
 }
 
 function subscribe(cb: () => void) {
