@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { memo, useCallback, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Lock, Pencil, Plus, Sparkles, Trash2, UserRoundCheck } from "lucide-react";
 import { usePersonaStore } from "@/store/usePersonaStore";
@@ -9,7 +9,7 @@ import { useHorizontalSwipe } from "@/lib/swipe-gesture";
 import { PersonaModal } from "./PersonaModal";
 import type { Persona } from "@/types";
 
-function PersonaCard({
+const PersonaCard = memo(function PersonaCard({
   persona,
   isActive,
   canAdd,
@@ -97,7 +97,7 @@ function PersonaCard({
       )}
     </motion.div>
   );
-}
+});
 
 export function PersonaRoster({ onRequestUpgrade }: { onRequestUpgrade: () => void }) {
   const personas = usePersonaStore((s) => s.personas);
@@ -112,24 +112,27 @@ export function PersonaRoster({ onRequestUpgrade }: { onRequestUpgrade: () => vo
 
   const allPersonas = useMemo(() => [...personas, ...customPersonas], [personas, customPersonas]);
 
-  function attemptToggle(id: string) {
-    const isActive = activeIds.includes(id);
-    if (!isActive && !flag.checkCanAdd(activeIds.length)) {
-      onRequestUpgrade();
-      return;
-    }
-    toggleActive(id);
-  }
+  const attemptToggle = useCallback(
+    (id: string) => {
+      const isActive = activeIds.includes(id);
+      if (!isActive && !flag.checkCanAdd(activeIds.length)) {
+        onRequestUpgrade();
+        return;
+      }
+      toggleActive(id);
+    },
+    [activeIds, flag, onRequestUpgrade, toggleActive]
+  );
 
-  function openCreate() {
+  const openCreate = useCallback(() => {
     setEditing(null);
     setModalOpen(true);
-  }
+  }, []);
 
-  function openEdit(p: Persona) {
+  const openEdit = useCallback((p: Persona) => {
     setEditing(p);
     setModalOpen(true);
-  }
+  }, []);
 
   return (
     <div className="glass flex min-h-0 flex-col overflow-hidden rounded-3xl">
