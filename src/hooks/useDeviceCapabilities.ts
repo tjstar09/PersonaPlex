@@ -1,6 +1,6 @@
 "use client";
 
-import { useSyncExternalStore, useMemo } from "react";
+import { useSyncExternalStore } from "react";
 
 type EffectiveType = "slow-2g" | "2g" | "3g" | "4g" | undefined;
 
@@ -44,7 +44,5 @@ function subscribe(cb: () => void) {
 }
 
 export function useDeviceCapabilities(): Capabilities {
-  const raw = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
-  // memo keeps identity stable when nothing changed
-  return useMemo(() => raw, [raw.isLowEnd, raw.cores, raw.memoryGB, raw.effectiveType, raw.saveData]);
+  return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 }
