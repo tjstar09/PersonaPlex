@@ -11,6 +11,7 @@ import { ChatInput } from "@/components/ChatInput";
 import { DebatePanel } from "@/components/DebatePanel";
 import { ApiSettings } from "@/components/ApiSettings";
 import { UpgradeModal } from "@/components/UpgradeModal";
+import { ToastProvider } from "@/components/ToastProvider";
 
 function Header() {
   const premium = usePremiumStatus();
@@ -70,7 +71,8 @@ export default function Home() {
   }
 
   return (
-    <main className="app-layout">
+    <ToastProvider>
+      <main className="app-layout">
       <header className="app-header">
         <Header />
       </header>
@@ -157,5 +159,6 @@ export default function Home() {
         )}
       </AnimatePresence>
     </main>
+    </ToastProvider>
   );
 }

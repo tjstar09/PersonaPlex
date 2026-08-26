@@ -70,14 +70,13 @@ export function PersonaRoster({ onRequestUpgrade }: { onRequestUpgrade: () => vo
                   ? "border-accent/50 bg-accent-soft"
                   : "border-transparent hover:border-line hover:bg-white/[0.03]"
               }`}
+              style={{ touchAction: 'pan-y' }}
             >
               <button
                 onClick={() => attemptToggle(p.id)}
                 className="flex min-w-0 flex-1 items-center gap-2.5 text-left"
                 title={
-                  isActive || flag.checkCanAdd(activeIds.length)
-                    ? `Toggle ${p.name}`
-                    : "Free tier limit reached — click to see upgrade options"
+                  isActive || flag.checkCanAdd(activeIds.length) ? `Toggle ${p.name}` : "Free tier limit reached — click to see upgrade options"
                 }
               >
                 <span className="text-xl">{p.avatar}</span>
