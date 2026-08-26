@@ -4,6 +4,7 @@ import "./globals.css";
 import { PWARegister } from "@/components/PWARegister";
 import { OfflineBanner } from "@/components/OfflineBanner";
 import { PWAInstallPrompt } from "@/components/PWAInstallPrompt";
+import { DeviceAdaptation } from "@/components/DeviceAdaptation";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -50,6 +51,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
+        <DeviceAdaptation />
         <OfflineBanner />
         {children}
         <PWAInstallPrompt />

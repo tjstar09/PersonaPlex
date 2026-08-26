@@ -287,7 +287,8 @@ export function ChatPanel() {
 
       <div
         ref={messagesContainerRef}
-        className="relative flex-1 space-y-4 overflow-y-auto px-5 py-4"
+        className="chat-messages relative flex-1 space-y-4 overflow-y-auto px-5 py-4"
+        style={{ contentVisibility: "auto" } as React.CSSProperties}
       >
         {isPulling && (
           <div

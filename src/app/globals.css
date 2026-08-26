@@ -339,7 +339,7 @@ body.right-sheet-open .bottom-sheet {
   .touch-target { min-height: var(--touch-target); min-width: var(--touch-target); }
 }
 
-/* Reduced motion */
+/* Reduced motion — media query + .reduced-motion class (JS-forced) */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
@@ -348,6 +348,56 @@ body.right-sheet-open .bottom-sheet {
     scroll-behavior: auto !important;
   }
 }
+.reduced-motion *, .reduced-motion *::before, .reduced-motion *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
+}
+.reduced-motion .hand-raised { animation: none !important; }
+.reduced-motion .stream-caret::after { animation: none !important; }
+
+/* Low-end / save-data — strip blur/shadow for compositing savings */
+.low-end .glass,
+.low-end .glass-strong {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+.low-end .glass {
+  background: rgba(255, 255, 255, 0.06) !important;
+}
+.low-end .glass-strong {
+  background: #16162a !important;
+}
+.low-end .glow-ring { box-shadow: none !important; }
+.low-end .hand-raised { animation: none !important; }
+
+/* Orientation handling — landscape phones (short height) + dvh viewport */
+@media (orientation: landscape) and (max-height: 500px) {
+  .app-layout { min-height: 100dvh; }
+  .app-header { padding: 6px 12px !important; }
+  .app-header .text-\[0\.95rem\] { font-size: 0.85rem !important; }
+  .bottom-sheet { max-height: 88dvh; }
+  .side-drawer { max-width: 360px; }
+}
+/* Ensure app always fills dynamic viewport (notch + browser chrome) */
+@supports (height: 100dvh) {
+  .app-layout { min-height: 100dvh; }
+}
+.orientation-landscape .app-sidebar,
+.orientation-landscape .app-right {
+  overscroll-behavior: contain;
+}
+
+/* Performance: containment + will-change islands */
+.chat-messages,
+.app-main,
+.app-sidebar,
+.app-right {
+  contain: layout style paint;
+}
+.motion-safe { will-change: transform, opacity; }
+.glass, .glass-strong { contain: layout style paint; }
 
 /* ============================================================================
    BOTTOM SHEET / DRAWER FRAMER MOTION VARIANTS (CSS fallback)
