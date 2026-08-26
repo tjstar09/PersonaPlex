@@ -1,0 +1,41 @@
+{
+  "name": "PersonaPlex — AI Persona Chat & Debates",
+  "short_name": "PersonaPlex",
+  "description": "Zero-backend, client-side AI persona chat & debate platform with @mentions, hand-raise orchestration and tone directives.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["standalone", "window-controls-overlay"],
+  "background_color": "#07070d",
+  "theme_color": "#8b5cf6",
+  "orientation": "any",
+  "categories": ["productivity", "entertainment"],
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "New Debate",
+      "url": "/?action=debate",
+      "description": "Start a new multi-persona debate",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    }
+  ]
+}
